@@ -9,6 +9,8 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 - **Deep Financial Analysis**: Processes all 166 financial statements per company
 - **AI-Powered Recommendations**: Uses OpenAI's o3-mini model (200K token context) to generate value investing signals
 - **In-depth Reporting**: Provides buy/sell/hold recommendations with detailed rationales
+- **Robust Error Handling**: Includes retry logic for API calls with exponential backoff
+- **Modular Design**: Well-organized codebase with separate modules for different functions
 
 ## Requirements
 
@@ -43,7 +45,27 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
    python portfolio_analyzer.py
    ```
 
-3. Review the analysis results in `portfolio_analysis.md`
+3. Review the analysis results in `data/processed/portfolio_analysis.md`
+
+## Project Structure
+
+```
+.
+├── config.json                 # Configuration settings
+├── portfolio_analyzer.py       # Main script
+├── combined_portfolio.md       # Your portfolio data
+├── data/                       # Data directory
+│   ├── raw/                    # Raw API data
+│   └── processed/              # Processed analysis results
+├── logs/                       # Log files
+└── utils/                      # Utility modules
+    ├── api.py                  # API interaction functions
+    ├── analysis.py             # Analysis functions
+    ├── config.py               # Configuration loader
+    ├── file_operations.py      # File handling functions
+    ├── logger.py               # Logging setup
+    └── portfolio.py            # Portfolio parsing functions
+```
 
 ## How It Works
 
@@ -70,7 +92,14 @@ The analysis provides signals for each stock:
 - **HOLD**: Fairly valued stocks or those with mixed signals
 - **SELL**: Overvalued stocks or those with concerning fundamentals
 
-Each recommendation includes a rationale, valuation assessment, and risk factors to consider.
+Each recommendation includes a detailed rationale, valuation assessment, and risk factors to consider.
+
+## Testing
+
+The project includes unit tests for key functionality:
+```
+python -m unittest discover tests
+```
 
 ## License
 

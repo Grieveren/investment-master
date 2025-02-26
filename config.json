@@ -1,0 +1,19 @@
+{
+    "api": {
+        "sws_api_url": "https://api.simplywall.st/graphql",
+        "portfolio_file": "combined_portfolio.md"
+    },
+    "retry": {
+        "max_retries": 3,
+        "retry_base_delay": 2,
+        "retry_max_delay": 10
+    },
+    "openai": {
+        "model": "o3-mini",
+        "reasoning_effort": "high"
+    },
+    "output": {
+        "raw_data_file": "data/raw/api_data.json",
+        "analysis_file": "data/processed/portfolio_analysis.md"
+    }
+} 

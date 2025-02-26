@@ -23,8 +23,32 @@ var/
 .installed.cfg
 *.egg
 
-# OS specific
+# Environment variables
+.env
+
+# Data files
+*.json
+data/
+!config.json
+
+# Logs
+logs/
+*.log
+
+# macOS
 .DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Test files
+.coverage
+htmlcov/
+
+# OS specific
 .DS_Store?
 ._*
 .Spotlight-V100
