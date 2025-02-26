@@ -28,6 +28,8 @@ import re
 import json
 import requests
 import datetime
+import time
+import random
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -43,6 +45,11 @@ print(f"OpenAI API Key: {OPENAI_API_KEY[:8]}...{OPENAI_API_KEY[-4:] if OPENAI_AP
 
 # API endpoints
 SWS_API_URL = "https://api.simplywall.st/graphql"
+
+# Retry settings
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 2  # Base delay in seconds between retries
+RETRY_MAX_DELAY = 10  # Maximum delay in seconds between retries
 
 # Initialize OpenAI client (only if key is available)
 client = None
@@ -77,7 +84,7 @@ def get_stock_ticker_and_exchange(stock_name):
     """Map stock names to tickers and exchanges for the API"""
     stock_map = {
         "Berkshire Hathaway B": {"ticker": "BRK.B", "exchange": "NYSE"},
-        "Allianz SE": {"ticker": "ALV", "exchange": "XETRA"},
+        "Allianz SE": {"ticker": "ALV", "exchange": "XTRA"},
         "GitLab Inc.": {"ticker": "GTLB", "exchange": "NasdaqGS"},
         "NVIDIA": {"ticker": "NVDA", "exchange": "NasdaqGS"},
         "Microsoft": {"ticker": "MSFT", "exchange": "NasdaqGS"},
@@ -91,8 +98,8 @@ def get_stock_ticker_and_exchange(stock_name):
     
     return stock_map.get(stock_name)
 
-def fetch_company_data(ticker, exchange):
-    """Fetch company data from SimplyWall.st GraphQL API"""
+def fetch_company_data(ticker, exchange, max_retries=MAX_RETRIES):
+    """Fetch company data from SimplyWall.st GraphQL API with retry logic"""
     query = """
     query companyByExchangeAndTickerSymbol($exchange: String!, $symbol: String!) {
       companyByExchangeAndTickerSymbol(exchange: $exchange, tickerSymbol: $symbol) {
@@ -126,26 +133,75 @@ def fetch_company_data(ticker, exchange):
         "Content-Type": "application/json"
     }
     
-    try:
-        response = requests.post(
-            SWS_API_URL,
-            headers=headers,
-            json={"query": query, "variables": variables}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching data for {ticker} on {exchange}: {e}")
-        if response.status_code != 200:
-            print(f"Response: {response.text}")
-        return None
+    retries = 0
+    while retries <= max_retries:
+        response = None
+        try:
+            if retries > 0:
+                # Calculate exponential backoff delay with jitter
+                delay = min(RETRY_BASE_DELAY * (2 ** (retries - 1)) + random.uniform(0, 1), RETRY_MAX_DELAY)
+                print(f"Retry attempt {retries}/{max_retries} after {delay:.2f}s delay...")
+                time.sleep(delay)
+                
+            response = requests.post(
+                SWS_API_URL,
+                headers=headers,
+                json={"query": query, "variables": variables}
+            )
+            
+            # Debug output to see raw response
+            print(f"Response status code: {response.status_code}")
+            
+            response.raise_for_status()
+            response_data = response.json()
+            
+            # Check for server-side errors in the GraphQL response
+            if "errors" in response_data and response_data.get("data") is None:
+                error_msg = response_data["errors"][0]["message"] if response_data["errors"] else "Unknown GraphQL error"
+                
+                if "socket hang up" in error_msg or "INTERNAL_SERVER_ERROR" in str(response_data):
+                    if retries < max_retries:
+                        print(f"Server-side error: {error_msg}. Will retry.")
+                        retries += 1
+                        continue
+                    else:
+                        print(f"Max retries reached. Last error: {error_msg}")
+                        return None
+                else:
+                    print(f"GraphQL error: {error_msg}")
+                    return response_data  # Return the error response for further analysis
+            
+            # If we got here, the request was successful
+            return response_data
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Request error fetching data for {ticker} on {exchange}: {e}")
+            
+            if response and hasattr(response, 'status_code') and response.status_code != 200:
+                print(f"Response: {response.text}")
+            
+            if retries < max_retries:
+                retries += 1
+            else:
+                print(f"Max retries reached. Last error: {e}")
+                return None
+                
+        except Exception as e:
+            print(f"Unexpected error fetching data for {ticker} on {exchange}: {e}")
+            
+            if retries < max_retries:
+                retries += 1
+            else:
+                print(f"Max retries reached. Last error: {e}")
+                return None
+    
+    return None  # Should never reach here but added for safety
 
 def get_value_investing_signals(portfolio_data, api_data):
     """Use OpenAI's o3-mini model to analyze stocks and provide buy/sell signals
     
-    This function processes all available financial statements (166 per company)
-    from SimplyWall.st and sends them to OpenAI's o3-mini model, which has a 
-    200K token context window capable of handling the full dataset.
+    This function processes each stock individually and combines the results,
+    ensuring every stock gets fully analyzed without context window limitations.
     
     Args:
         portfolio_data (list): List of stock dictionaries with name, shares, price, etc.
@@ -158,8 +214,8 @@ def get_value_investing_signals(portfolio_data, api_data):
     if client is None:
         return "Error: OpenAI client not initialized. Please check your API key."
         
-    # Convert the data to a more digestible format for the AI
-    stock_analysis_data = []
+    # Process each stock individually
+    stock_analyses = []
     
     for stock in portfolio_data:
         stock_info = get_stock_ticker_and_exchange(stock["name"])
@@ -175,26 +231,24 @@ def get_value_investing_signals(portfolio_data, api_data):
         # Check if we have data for this stock
         if stock_data is None:
             print(f"No API data found for {stock['name']}")
-            stock_analysis_data.append({
+            stock_analyses.append({
                 "name": stock["name"],
                 "ticker": ticker,
-                "shares": stock["shares"],
-                "current_price": stock["current_price"],
-                "market_value": stock["market_value"],
-                "weight": stock["weight"],
-                "statements": [],
-                "no_data": True
+                "signal": "N/A",
+                "rationale": "Unable to analyze due to missing data.",
+                "valuation": "Unknown",
+                "risks": "N/A",
+                "error": True
             })
             continue
         
-        # Extract ALL statements data for analysis
+        # Extract statements data for this stock
         all_statements = []
         if isinstance(stock_data, dict) and "data" in stock_data:
             data_obj = stock_data["data"]
             if data_obj and isinstance(data_obj, dict) and "companyByExchangeAndTickerSymbol" in data_obj:
                 company_data = data_obj["companyByExchangeAndTickerSymbol"]
                 if company_data and isinstance(company_data, dict) and "statements" in company_data:
-                    # Include ALL statements
                     all_statements = company_data["statements"]
                     print(f"Including all {len(all_statements)} statements for {stock['name']}")
                 else:
@@ -204,7 +258,8 @@ def get_value_investing_signals(portfolio_data, api_data):
         else:
             print(f"Invalid API response format for {stock['name']}")
         
-        stock_analysis_data.append({
+        # Prepare stock data for analysis
+        stock_analysis_data = {
             "name": stock["name"],
             "ticker": ticker,
             "shares": stock["shares"],
@@ -213,60 +268,153 @@ def get_value_investing_signals(portfolio_data, api_data):
             "weight": stock["weight"],
             "statements": all_statements,
             "no_data": len(all_statements) == 0
-        })
-    
-    analysis_prompt = f"""
-    Analyze the following stocks from a value investing perspective and provide buy/sell/hold signals.
-    For each stock, consider:
-    1. Price-to-earnings ratio
-    2. Price-to-book ratio
-    3. Debt levels
-    4. Return on equity
-    5. Competitive advantage
-    6. Current valuation vs. intrinsic value
-    
-    The SimplyWall.st statements data contains insights about each company's financial health, risks, and potential rewards.
-    
-    Portfolio data: {json.dumps(stock_analysis_data, indent=2)}
-    
-    For each stock, provide:
-    - Signal (BUY/SELL/HOLD)
-    - Brief rationale based on value investing principles
-    - Current valuation assessment (overvalued, fairly valued, undervalued)
-    - Any risk factors to consider
-    
-    Format your response as a markdown table with clear recommendations.
-    """
-    
-    try:
-        # Using o3-mini with the correct parameters
-        response = client.chat.completions.create(
-            model="o3-mini",
-            messages=[
-                {"role": "system", "content": "You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham."},
-                {"role": "user", "content": analysis_prompt}
-            ]
-        )
+        }
         
-        print("Successfully received a response from OpenAI o3-mini")
+        # Skip analysis if we don't have statements
+        if len(all_statements) == 0:
+            stock_analyses.append({
+                "name": stock["name"],
+                "ticker": ticker,
+                "signal": "N/A",
+                "rationale": "Unable to analyze due to missing financial statements.",
+                "valuation": "Unknown",
+                "risks": "N/A",
+                "error": True
+            })
+            continue
         
-        if not hasattr(response, 'choices') or not response.choices:
-            print("Empty response received from OpenAI API")
-            return "Error: Empty response from OpenAI API"
+        # Create analysis prompt for this specific stock
+        analysis_prompt = f"""
+        Analyze the following stock from a value investing perspective and provide a buy/sell/hold signal.
+        Consider:
+        1. Price-to-earnings ratio
+        2. Price-to-book ratio
+        3. Debt levels
+        4. Return on equity
+        5. Competitive advantage
+        6. Current valuation vs. intrinsic value
+        
+        The SimplyWall.st statements data contains insights about the company's financial health, risks, and potential rewards.
+        
+        Stock data: {json.dumps(stock_analysis_data, indent=2)}
+        
+        Provide:
+        1. Signal (BUY/SELL/HOLD)
+        2. Brief rationale based on value investing principles (2-3 sentences)
+        3. Current valuation assessment (overvalued, fairly valued, undervalued)
+        4. Top 2-3 risk factors to consider
+        
+        Format your response using JSON with these exact keys: "signal", "rationale", "valuation", "risks"
+        Example: {{"signal": "BUY", "rationale": "Strong financials with...", "valuation": "Undervalued", "risks": "Competition from..."}}
+        """
+        
+        try:
+            # Using o3-mini with the correct parameters for this stock
+            print(f"Sending analysis request for {stock['name']}...")
+            response = client.chat.completions.create(
+                model="o3-mini",
+                messages=[
+                    {"role": "system", "content": "You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham."},
+                    {"role": "user", "content": analysis_prompt}
+                ],
+                reasoning_effort="high",  # Set to high mode for more thorough analysis
+                response_format={"type": "json_object"}  # Ensure structured JSON response
+            )
             
-        if not hasattr(response.choices[0], 'message') or not hasattr(response.choices[0].message, 'content'):
-            print("Response does not contain message content")
-            return "Error: No content in OpenAI API response"
+            if not hasattr(response, 'choices') or not response.choices:
+                print(f"Empty response received from OpenAI API for {stock['name']}")
+                stock_analyses.append({
+                    "name": stock["name"],
+                    "ticker": ticker,
+                    "signal": "ERROR",
+                    "rationale": "API returned an empty response.",
+                    "valuation": "Unknown",
+                    "risks": "N/A",
+                    "error": True
+                })
+                continue
+                
+            content = response.choices[0].message.content
+            if not content:
+                print(f"Empty content in response for {stock['name']}")
+                stock_analyses.append({
+                    "name": stock["name"],
+                    "ticker": ticker,
+                    "signal": "ERROR",
+                    "rationale": "API returned empty content.",
+                    "valuation": "Unknown", 
+                    "risks": "N/A",
+                    "error": True
+                })
+                continue
             
-        content = response.choices[0].message.content
-        if not content:
-            print("Empty content in response")
-            return "Error: Empty content in OpenAI API response"
-            
-        return content
-    except Exception as e:
-        print(f"Error getting AI analysis: {e}")
-        return f"Error: Could not get AI analysis. {str(e)}"
+            # Parse JSON response
+            try:
+                analysis_result = json.loads(content)
+                analysis_result["name"] = stock["name"]
+                analysis_result["ticker"] = ticker
+                analysis_result["error"] = False
+                stock_analyses.append(analysis_result)
+                print(f"✅ Successfully analyzed {stock['name']}: {analysis_result['signal']}")
+            except json.JSONDecodeError:
+                print(f"Failed to parse JSON response for {stock['name']}")
+                # Try to extract signal from text response
+                if "BUY" in content.upper():
+                    signal = "BUY"
+                elif "SELL" in content.upper():
+                    signal = "SELL"
+                elif "HOLD" in content.upper():
+                    signal = "HOLD"
+                else:
+                    signal = "UNKNOWN"
+                    
+                stock_analyses.append({
+                    "name": stock["name"],
+                    "ticker": ticker,
+                    "signal": signal,
+                    "rationale": "Failed to parse structured response. Raw content: " + content[:100] + "...",
+                    "valuation": "Unknown",
+                    "risks": "N/A",
+                    "error": True
+                })
+                
+        except Exception as e:
+            print(f"Error analyzing {stock['name']}: {e}")
+            stock_analyses.append({
+                "name": stock["name"],
+                "ticker": ticker,
+                "signal": "ERROR",
+                "rationale": f"Exception during analysis: {str(e)}",
+                "valuation": "Unknown",
+                "risks": "N/A",
+                "error": True
+            })
+    
+    # Combine all analyses into a single markdown table
+    markdown_output = "# Portfolio Value Investing Analysis\n\n"
+    markdown_output += f"Analysis Date: {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
+    
+    # Create the table header
+    markdown_output += "| Stock (Ticker) | Signal | Rationale | Valuation Assessment | Key Risk Factors |\n"
+    markdown_output += "|----------------|--------|-----------|----------------------|------------------|\n"
+    
+    # Add each stock's analysis to the table
+    for analysis in stock_analyses:
+        name_with_ticker = f"{analysis['name']} ({analysis['ticker']})"
+        signal = analysis['signal']
+        rationale = analysis.get('rationale', 'No rationale provided')
+        valuation = analysis.get('valuation', 'Unknown')
+        risks = analysis.get('risks', 'No risks identified')
+        
+        markdown_output += f"| {name_with_ticker} | {signal} | {rationale} | {valuation} | {risks} |\n"
+    
+    # Add summary and notes
+    markdown_output += "\n## Analysis Summary\n\n"
+    markdown_output += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's o3-mini model. "
+    markdown_output += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
+    markdown_output += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
+    
+    return markdown_output
 
 def main():
     if not SWS_API_TOKEN:
@@ -301,8 +449,24 @@ def main():
             
             stock_data = fetch_company_data(ticker, exchange)
             if stock_data:
-                api_data[stock["name"]] = stock_data
-                print(f"✅ Successfully fetched data for {stock['name']}")
+                # Safely check the response structure
+                has_valid_data = (
+                    isinstance(stock_data, dict) and 
+                    "data" in stock_data and 
+                    isinstance(stock_data["data"], dict) and
+                    "companyByExchangeAndTickerSymbol" in stock_data["data"] and
+                    stock_data["data"]["companyByExchangeAndTickerSymbol"] is not None
+                )
+                
+                if has_valid_data:
+                    api_data[stock["name"]] = stock_data
+                    
+                    company = stock_data["data"]["companyByExchangeAndTickerSymbol"]
+                    statement_count = len(company.get("statements", [])) if company else 0
+                    print(f"✅ Successfully fetched data for {stock['name']}: {statement_count} statements")
+                else:
+                    print(f"⚠️ Data received for {stock['name']} but structure is not as expected:")
+                    print(json.dumps(stock_data, indent=2)[:500] + "..." if len(json.dumps(stock_data)) > 500 else json.dumps(stock_data, indent=2))
             else:
                 print(f"❌ Failed to fetch data for {stock['name']}")
         else:
@@ -316,17 +480,15 @@ def main():
     
     # Get value investing signals
     if openai_available and client is not None:
-        print("\nAnalyzing stocks for value investing signals using OpenAI o3-mini with ALL statements...")
+        print("\nAnalyzing stocks for value investing signals using OpenAI o3-mini (individual stock approach)...")
         signals = get_value_investing_signals(stocks, api_data)
         
         # Print results
-        print("\n=== VALUE INVESTING ANALYSIS (via OpenAI o3-mini - FULL DATA) ===\n")
-        print(signals)
+        print("\n=== VALUE INVESTING ANALYSIS COMPLETE ===\n")
+        print("Analysis has been generated for all stocks in your portfolio.")
         
         # Save results to file
         with open("portfolio_analysis.md", "w") as f:
-            f.write("# Portfolio Value Investing Analysis\n\n")
-            f.write(f"Analysis Date: {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n")
             f.write(signals)
         
         print("\nAnalysis complete! Results saved to portfolio_analysis.md")
