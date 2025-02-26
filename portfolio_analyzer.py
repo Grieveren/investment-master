@@ -300,7 +300,7 @@ def get_value_investing_signals(portfolio_data, api_data):
         
         Provide:
         1. Signal (BUY/SELL/HOLD)
-        2. Brief rationale based on value investing principles (2-3 sentences)
+        2. Detailed rationale based on value investing principles, explaining how key metrics support the recommendation
         3. Current valuation assessment (overvalued, fairly valued, undervalued)
         4. Top 2-3 risk factors to consider
         
