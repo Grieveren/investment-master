@@ -9,17 +9,8 @@
         "retry_max_delay": 10
     },
     "openai": {
-        "default_model": "o3-mini",
-        "models": {
-            "o3-mini": {
-                "name": "o3-mini",
-                "reasoning_effort": "high"
-            },
-            "claude-3-7": {
-                "name": "claude-3-7-sonnet-20240229",
-                "reasoning_effort": "thinking"
-            }
-        }
+        "model": "o3-mini",
+        "reasoning_effort": "high"
     },
     "output": {
         "raw_data_file": "data/raw/api_data.json",

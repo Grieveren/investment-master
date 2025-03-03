@@ -30,7 +30,7 @@ def create_openai_client(api_key):
         logger.error(f"Error creating OpenAI client: {e}")
         return None
 
-def get_value_investing_signals(portfolio_data, api_data, openai_client, selected_model="o3-mini"):
+def get_value_investing_signals(portfolio_data, api_data, openai_client):
     """Use OpenAI to analyze stocks and provide buy/sell signals.
     
     This function processes each stock individually and combines the results,
@@ -40,7 +40,6 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client, selecte
         portfolio_data (list): List of stock dictionaries with name, shares, price, etc.
         api_data (dict): Dictionary of API responses from SimplyWall.st
         openai_client (OpenAI): OpenAI client.
-        selected_model (str): Model to use for analysis ('o3-mini' or 'claude-3-7')
         
     Returns:
         str: Markdown-formatted analysis with buy/sell/hold signals for each stock
@@ -55,15 +54,10 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client, selecte
     # Print progress header
     total_stocks = len(portfolio_data)
     print(f"\n{'='*50}")
-    print(f"ANALYZING {total_stocks} STOCKS WITH {selected_model.upper()}")
+    print(f"ANALYZING {total_stocks} STOCKS WITH OPENAI")
     print(f"{'='*50}")
     print(f"{'Stock':<30} | {'Status':<20} | {'Signal':<10}")
     print(f"{'-'*30} | {'-'*20} | {'-'*10}")
-
-    # Get model settings from config
-    model_config = config["openai"]["models"][selected_model]
-    model_name = model_config["name"]
-    reasoning_effort = model_config["reasoning_effort"]
     
     for index, stock in enumerate(portfolio_data):
         from utils.portfolio import get_stock_ticker_and_exchange
@@ -164,15 +158,18 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client, selecte
         """
         
         try:
-            # Using the selected model with its parameters
-            logger.info(f"Sending analysis request for {stock['name']} using {model_name}...")
+            # Using o3-mini with the correct parameters for this stock
+            logger.info(f"Sending analysis request for {stock['name']}...")
+            
+            # Get model and reasoning_effort from config
+            model = config["openai"]["model"]
+            reasoning_effort = config["openai"]["reasoning_effort"]
             
             # Show analysis in progress
             start_time = time.time()
             
-            # Create a chat completion with the appropriate model
             response = openai_client.chat.completions.create(
-                model=model_name,
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham."},
                     {"role": "user", "content": analysis_prompt}
