@@ -12,6 +12,10 @@
         "model": "o3-mini",
         "reasoning_effort": "high"
     },
+    "claude": {
+        "model": "claude-3-7-sonnet-20250219",
+        "thinking_budget": 16000
+    },
     "output": {
         "raw_data_file": "data/raw/api_data.json",
         "analysis_file": "data/processed/portfolio_analysis.md"
