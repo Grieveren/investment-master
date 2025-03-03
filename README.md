@@ -1,13 +1,13 @@
 # Investment Master - Portfolio Analyzer
 
-A Python tool for analyzing stock portfolios using financial data from SimplyWall.st and AI-powered analysis by OpenAI's o3-mini model.
+A Python tool for analyzing stock portfolios using financial data from SimplyWall.st and AI-powered analysis by either OpenAI's o3-mini model or Claude 3.7.
 
 ## Features
 
 - **Portfolio Data Parsing**: Automatically parses your portfolio data from a Markdown file
 - **Financial Data Retrieval**: Fetches comprehensive financial statements from SimplyWall.st
 - **Deep Financial Analysis**: Processes all 166 financial statements per company
-- **AI-Powered Recommendations**: Uses OpenAI's o3-mini model (200K token context) to generate value investing signals
+- **AI-Powered Recommendations**: Choose between OpenAI's o3-mini model or Claude 3.7 for analysis
 - **In-depth Reporting**: Provides buy/sell/hold recommendations with detailed rationales
 - **Robust Error Handling**: Includes retry logic for API calls with exponential backoff
 - **Modular Design**: Well-organized codebase with separate modules for different functions
@@ -40,9 +40,17 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
    | 1 | Stock A  | 100    | 50.0  | 5,000        | 10.0%    |
    ```
 
-2. Run the analyzer:
+2. Run the analyzer with your preferred AI model:
    ```
+   # Default (o3-mini)
    python portfolio_analyzer.py
+   
+   # Specify model explicitly
+   python portfolio_analyzer.py --model o3-mini
+   python portfolio_analyzer.py --model claude-3-7
+   
+   # Data fetch only (no analysis)
+   python portfolio_analyzer.py --data-only
    ```
 
 3. Review the analysis results in `data/processed/portfolio_analysis.md`
@@ -71,9 +79,18 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 
 1. The script parses your portfolio data from the markdown file
 2. It fetches detailed financial data for each stock from SimplyWall.st
-3. All financial statements (166 per company) are processed and sent to OpenAI's o3-mini model
+3. All financial statements (166 per company) are processed and sent to the selected AI model
 4. The AI analyzes the data using value investing principles (P/E ratio, P/B ratio, debt levels, etc.)
 5. A comprehensive analysis is generated with buy/sell/hold signals, rationales, and risk factors
+
+## AI Model Options
+
+You can choose between two AI models for analysis:
+
+- **o3-mini** (default): OpenAI's o3-mini model with high reasoning effort, optimized for financial analysis with a 200K token context window
+- **claude-3-7**: Anthropic's Claude 3.7 model with "thinking" reasoning level, providing an alternative analysis approach
+
+Each model has its own strengths and may produce different insights for your portfolio analysis.
 
 ## Value Investing Criteria
 

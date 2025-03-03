@@ -59,6 +59,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Portfolio Analyzer')
     parser.add_argument('--data-only', action='store_true', 
                         help='Only fetch data, skip analysis')
+    parser.add_argument('--model', type=str, choices=['o3-mini', 'claude-3-7'],
+                        help='Select AI model for analysis: o3-mini (default) or claude-3-7')
     return parser.parse_args()
 
 def main():
@@ -99,6 +101,15 @@ def main():
     if not sws_api_token:
         logger.error("Error: SimplyWall.st API token not found. Please add it to your .env file.")
         return
+    
+    # Set the model based on args or default
+    selected_model = args.model if args.model else config["openai"]["default_model"]
+    if selected_model not in config["openai"]["models"]:
+        logger.warning(f"Invalid model selection: {selected_model}. Using default model.")
+        selected_model = config["openai"]["default_model"]
+    
+    print(f"Selected AI model: {selected_model}")
+    logger.info(f"Selected AI model: {selected_model}")
     
     # Check OpenAI API key
     openai_available = False
@@ -142,9 +153,12 @@ def main():
     
     # Get value investing signals
     if not args.data_only and openai_available and openai_client is not None:
-        print(f"Analyzing stocks using OpenAI {config['openai']['model']}...")
-        logger.info(f"Analyzing stocks for value investing signals using OpenAI {config['openai']['model']} (individual stock approach)...")
-        signals = get_value_investing_signals(stocks, api_data, openai_client)
+        model_config = config["openai"]["models"][selected_model]
+        model_name = model_config["name"]
+        reasoning_effort = model_config["reasoning_effort"]
+        print(f"Analyzing stocks using {model_name} with {reasoning_effort} reasoning effort...")
+        logger.info(f"Analyzing stocks for value investing signals using {model_name} (individual stock approach)...")
+        signals = get_value_investing_signals(stocks, api_data, openai_client, selected_model)
         
         # Print results
         print("=== VALUE INVESTING ANALYSIS COMPLETE ===")
