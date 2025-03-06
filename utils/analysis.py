@@ -17,6 +17,7 @@ except ImportError:
 
 from utils.logger import logger
 from utils.config import config
+from utils.portfolio import get_stock_ticker_and_exchange
 
 def create_openai_client(api_key):
     """Create an OpenAI client.
@@ -103,7 +104,15 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     
     for idx, stock in enumerate(portfolio_data):
         try:
-            ticker = stock['ticker']
+            # Use the utility function to get ticker and exchange from the stock name
+            stock_info = get_stock_ticker_and_exchange(stock['name'])
+            if not stock_info:
+                logger.warning(f"Skipping {stock['name']} - no ticker/exchange info")
+                print(f"{stock['name']:<30} | {'SKIPPED - No info':<20} | {'N/A':<10}")
+                continue
+                
+            ticker = stock_info['ticker']
+            
             if ticker not in api_data:
                 logger.warning(f"No data found for {ticker}. Skipping analysis.")
                 continue
