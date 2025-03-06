@@ -104,20 +104,39 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     
     for idx, stock in enumerate(portfolio_data):
         try:
-            # Use the utility function to get ticker and exchange from the stock name
-            stock_info = get_stock_ticker_and_exchange(stock['name'])
+            # Get stock info
+            stock_name = stock['name']
+            
+            # Check if we have data for this stock
+            if stock_name not in api_data:
+                logger.warning(f"No data found for {stock_name}. Skipping analysis.")
+                continue
+            
+            # Use the utility function to get ticker for display purposes
+            stock_info = get_stock_ticker_and_exchange(stock_name)
             if not stock_info:
-                logger.warning(f"Skipping {stock['name']} - no ticker/exchange info")
-                print(f"{stock['name']:<30} | {'SKIPPED - No info':<20} | {'N/A':<10}")
-                continue
-                
-            ticker = stock_info['ticker']
+                ticker = "N/A"
+            else:
+                ticker = stock_info['ticker']
             
-            if ticker not in api_data:
-                logger.warning(f"No data found for {ticker}. Skipping analysis.")
-                continue
+            # Get company data from API response    
+            api_response = api_data[stock_name]
             
-            company_data = api_data[ticker]
+            # Extract company data from API response
+            company_data = {}
+            
+            if "data" in api_response and "companyByExchangeAndTickerSymbol" in api_response["data"]:
+                company_obj = api_response["data"]["companyByExchangeAndTickerSymbol"]
+                company_data = {
+                    "name": company_obj.get("name", stock_name),
+                    "ticker": company_obj.get("tickerSymbol", ticker),
+                    "exchange": company_obj.get("exchangeSymbol", "Unknown"),
+                    "statements": company_obj.get("statements", [])
+                }
+            else:
+                # No valid data found
+                logger.warning(f"Invalid API response format for {stock_name}")
+                continue
             
             print(f"{company_data['name']:<30} | {'Processing...':<20} | {'':<10}", end='\r')
             
