@@ -185,7 +185,29 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     markdown += "|----------------|--------|-----------|----------------------|------------------|\n"
     
     for result in analysis_results:
-        markdown += f"| {result['name']} ({result['ticker']}) | {result['signal']} | {result['rationale']} | {result['valuation_assessment']} | {result['key_risk_factors']} |\n"
+        # Ensure all fields are properly formatted for markdown table
+        name_with_ticker = f"{result['name']} ({result['ticker']})"
+        signal = result['signal']
+        
+        # Clean and format rationale
+        rationale = result.get('rationale', 'Analysis unavailable')
+        rationale = rationale.replace('\n', ' ').replace('|', '/').strip()
+        if len(rationale) > 300:
+            rationale = rationale[:297] + "..."
+            
+        # Clean and format valuation assessment
+        valuation = result.get('valuation_assessment', 'Unknown')
+        valuation = valuation.replace('\n', ' ').replace('|', '/').strip()
+        if len(valuation) > 300:
+            valuation = valuation[:297] + "..."
+            
+        # Clean and format risk factors
+        risks = result.get('key_risk_factors', 'None identified')
+        risks = risks.replace('\n', ' ').replace('|', '/').strip()
+        if len(risks) > 300:
+            risks = risks[:297] + "..."
+        
+        markdown += f"| {name_with_ticker} | {signal} | {rationale} | {valuation} | {risks} |\n"
     
     markdown += "\n## Analysis Summary\n\n"
     if model.startswith("claude"):
@@ -240,10 +262,24 @@ def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219")
     try:
         thinking_budget = config["claude"].get("thinking_budget", 16000)
         
+        # Enhanced system prompt with explicit formatting instructions
+        system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+
+Your analysis must include EXACTLY these four distinct sections, each with its own heading:
+
+1. SIGNAL: State a clear BUY, SELL, or HOLD recommendation as the first line.
+2. RATIONALE: Provide a detailed explanation of your recommendation, focusing on value investing principles.
+3. VALUATION ASSESSMENT: Evaluate whether the stock is undervalued, fairly valued, or overvalued.
+4. KEY RISK FACTORS: List the main risks that could impact the investment thesis.
+
+Format each section with a clear heading (e.g., "## SIGNAL") followed by concise content.
+DO NOT include other headings or sections that would confuse parsing.
+"""
+        
         response = client.messages.create(
             model=model,
             max_tokens=20000,  # Increased to be greater than thinking budget
-            system="You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.",
+            system=system_prompt,
             messages=[
                 {"role": "user", "content": user_prompt}
             ],
@@ -324,12 +360,14 @@ def build_analysis_prompt(company_data):
     
     # Build the prompt
     prompt = f"""
-    You are a value investing expert analyzing stock data.
+    As a value investing expert, analyze this stock with Benjamin Graham and Warren Buffett's principles:
+
+    COMPANY INFORMATION:
+    Name: {name}
+    Ticker: {ticker}
+    Exchange: {exchange}
     
-    Stock Information:
-    Company: {name} ({ticker} on {exchange})
-    
-    Financial Data:
+    KEY FINANCIAL METRICS:
     """
     
     # Add selected important metrics if available
@@ -353,7 +391,7 @@ def build_analysis_prompt(company_data):
             prompt += f"- {label}: {financial_metrics[key]}\n"
     
     # Add all remaining financial metrics
-    prompt += "\nDetailed Financial Statements:\n"
+    prompt += "\nADDITIONAL FINANCIAL DATA:\n"
     for key, value in financial_metrics.items():
         if key not in [k for k, _ in key_metrics]:
             # Format the key name for better readability
@@ -361,26 +399,29 @@ def build_analysis_prompt(company_data):
             prompt += f"- {formatted_key}: {value}\n"
     
     prompt += """
-    Based on the principles of value investing (Benjamin Graham and Warren Buffett), analyze this company and provide:
-    
-    1. A buy/sell/hold recommendation with detailed rationale
-    2. Valuation assessment (undervalued, fairly valued, or overvalued) with specific analysis of current price vs intrinsic value
-    3. Key risk factors from a value investing perspective
-    
-    In your analysis, focus on:
+    REQUIRED ANALYSIS FORMAT:
+    Your analysis must include exactly these four sections with these specific headings:
+
+    ## SIGNAL
+    Your BUY, SELL, or HOLD recommendation based on value investing principles.
+
+    ## RATIONALE
+    Detailed explanation of your recommendation focusing on:
+    - Competitive advantages (economic moat)
+    - Management quality and capital allocation
+    - Financial strength and stability
+    - Cash flow generation and earnings quality
+
+    ## VALUATION ASSESSMENT
+    Whether the stock is undervalued, fairly valued, or overvalued, with analysis of:
+    - Current price relative to intrinsic value
     - Margin of safety
-    - Quality of management
-    - Sustainable competitive advantages
-    - Debt levels and financial strength
-    - Earnings quality and consistency
-    - Free cash flow generation
-    - Return on invested capital
-    
-    Provide your response in a clear, structured format with specific sections for:
-    1. SIGNAL (BUY/SELL/HOLD)
-    2. RATIONALE
-    3. VALUATION ASSESSMENT
-    4. KEY RISK FACTORS
+    - Potential return prospects
+
+    ## KEY RISK FACTORS
+    The main risks that could negatively impact this investment thesis.
+
+    IMPORTANT: Keep each section concise and focused. Do not include additional sections or sub-headings.
     """
     
     return prompt
@@ -399,7 +440,7 @@ def extract_analysis_components(response_text):
     valuation = "Unknown"
     risk_factors = "None identified"
     
-    # Try to extract signal
+    # Try to extract signal directly from response
     if "BUY" in response_text.upper():
         signal = "BUY"
     elif "SELL" in response_text.upper():
@@ -407,35 +448,92 @@ def extract_analysis_components(response_text):
     elif "HOLD" in response_text.upper():
         signal = "HOLD"
     
-    # Try to extract sections by looking for headers
+    # Improved section detection with multiple possible heading formats
     sections = {}
     current_section = None
+    section_text = []
     
-    for line in response_text.split('\n'):
-        # Check for section headers
+    # Normalize line breaks to ensure consistent processing
+    normalized_text = response_text.replace('\r\n', '\n')
+    
+    for line in normalized_text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Check for section headers with different formats (##, #, UPPERCASE:, etc.)
         line_upper = line.upper()
-        if "SIGNAL" in line_upper or "RECOMMENDATION" in line_upper:
+        
+        # Signal/Recommendation section
+        if any(pattern in line_upper for pattern in ["## SIGNAL", "# SIGNAL", "SIGNAL:", "RECOMMENDATION:", "## RECOMMENDATION", "# RECOMMENDATION"]):
+            if current_section and section_text:
+                sections[current_section] = ' '.join(section_text)
             current_section = "signal"
-            sections[current_section] = ""
-        elif "RATIONALE" in line_upper or "ANALYSIS" in line_upper:
-            current_section = "rationale"
-            sections[current_section] = ""
-        elif "VALUATION" in line_upper:
+            section_text = []
+            continue
+            
+        # Rationale section
+        elif any(pattern in line_upper for pattern in ["## RATIONALE", "# RATIONALE", "RATIONALE:", "## ANALYSIS", "# ANALYSIS", "ANALYSIS:"]):
+            if current_section and section_text:
+                sections[current_section] = ' '.join(section_text)
+            current_section = "rationale" 
+            section_text = []
+            continue
+            
+        # Valuation section
+        elif any(pattern in line_upper for pattern in ["## VALUATION", "# VALUATION", "VALUATION:", "## VALUATION ASSESSMENT", "# VALUATION ASSESSMENT", "VALUATION ASSESSMENT:"]):
+            if current_section and section_text:
+                sections[current_section] = ' '.join(section_text)
             current_section = "valuation"
-            sections[current_section] = ""
-        elif "RISK" in line_upper:
+            section_text = []
+            continue
+            
+        # Risk section
+        elif any(pattern in line_upper for pattern in ["## RISK", "# RISK", "RISK:", "## KEY RISK", "# KEY RISK", "KEY RISK FACTORS:", "## KEY RISK FACTORS", "# KEY RISK FACTORS"]):
+            if current_section and section_text:
+                sections[current_section] = ' '.join(section_text)
             current_section = "risks"
-            sections[current_section] = ""
-        elif current_section and line.strip():
-            # Add content to current section
-            sections[current_section] += line.strip() + " "
+            section_text = []
+            continue
+            
+        # Add content to current section if we're in one
+        elif current_section:
+            # Skip sub-headers within sections to avoid keeping them in content
+            if line.startswith('#') or line.startswith('*'):
+                continue
+            section_text.append(line)
+    
+    # Don't forget to add the last section
+    if current_section and section_text:
+        sections[current_section] = ' '.join(section_text)
     
     # Extract content from identified sections
+    if "signal" in sections:
+        # Extract only the BUY/SELL/HOLD from the signal section
+        signal_text = sections["signal"].upper()
+        if "BUY" in signal_text:
+            signal = "BUY"
+        elif "SELL" in signal_text:
+            signal = "SELL"
+        elif "HOLD" in signal_text:
+            signal = "HOLD"
+    
     if "rationale" in sections:
         rationale = sections["rationale"].strip()
+        # Trim to reasonable length for table display
+        if len(rationale) > 300:
+            rationale = rationale[:297] + "..."
+    
     if "valuation" in sections:
         valuation = sections["valuation"].strip()
+        # Trim to reasonable length for table display
+        if len(valuation) > 300:
+            valuation = valuation[:297] + "..."
+    
     if "risks" in sections:
         risk_factors = sections["risks"].strip()
+        # Trim to reasonable length for table display
+        if len(risk_factors) > 300:
+            risk_factors = risk_factors[:297] + "..."
     
     return signal, rationale, valuation, risk_factors 
