@@ -7,6 +7,9 @@ import json
 import datetime
 import time
 from openai import OpenAI
+from utils.logger import logger
+from utils.config import config
+from utils.file_operations import save_markdown, save_json_data
 
 # Try to import Anthropic, but don't fail if not available
 try:
@@ -15,8 +18,6 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
-from utils.logger import logger
-from utils.config import config
 from utils.portfolio import get_stock_ticker_and_exchange
 
 def create_openai_client(api_key):
@@ -102,6 +103,13 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     
     analysis_date = datetime.datetime.now().strftime("%Y-%m-%d")
     
+    # Get the model short name for folder structure
+    model_short_name = "openai" if model == "o3-mini" else "claude"
+    
+    # Create the model-specific companies directory
+    model_companies_dir = os.path.join(config["output"]["companies_dir"], model_short_name)
+    os.makedirs(model_companies_dir, exist_ok=True)
+    
     for idx, stock in enumerate(portfolio_data):
         try:
             # Get stock info
@@ -160,7 +168,7 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
             elapsed_time = time.time() - start_time
             
             # Extract the buy/sell/hold signal and rationale from the response
-            signal, rationale, valuation, risk_factors = extract_analysis_components(response)
+            signal, rationale, valuation, risk_factors, rationale_truncated, valuation_truncated, risk_factors_truncated = extract_analysis_components(response)
             
             # Add to results
             analysis_results.append({
@@ -169,8 +177,38 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
                 'signal': signal,
                 'rationale': rationale,
                 'valuation_assessment': valuation,
-                'key_risk_factors': risk_factors
+                'key_risk_factors': risk_factors,
+                'rationale_truncated': rationale_truncated,
+                'valuation_assessment_truncated': valuation_truncated,
+                'key_risk_factors_truncated': risk_factors_truncated
             })
+            
+            # Save individual company analysis to its own file in model-specific folder
+            company_filename = f"{ticker.replace('.', '_')}.md"
+            company_filepath = os.path.join(model_companies_dir, company_filename)
+            
+            # Create individual company markdown content
+            company_markdown = f"# {company_data['name']} ({ticker}) Analysis\n\n"
+            company_markdown += f"**Analysis Date:** {analysis_date}\n\n"
+            company_markdown += f"**Signal:** {signal}\n\n"
+            company_markdown += "## Rationale\n\n"
+            company_markdown += f"{rationale}\n\n"
+            company_markdown += "## Valuation Assessment\n\n"
+            company_markdown += f"{valuation}\n\n"
+            company_markdown += "## Key Risk Factors\n\n"
+            company_markdown += f"{risk_factors}\n\n"
+            
+            # Add footer with model information
+            company_markdown += "---\n\n"
+            if model.startswith("claude"):
+                company_markdown += "This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with extended thinking. "
+            else:
+                company_markdown += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's o3-mini model. "
+            company_markdown += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
+            company_markdown += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
+            
+            # Save the individual company file
+            save_markdown(company_markdown, company_filepath)
             
             print(f"{company_data['name']:<30} | {'✅ Complete':<20} | {signal:<10}")
             logger.info(f"Analyzed {company_data['name']} ({ticker}) in {elapsed_time:.1f}s: {signal}")
@@ -179,35 +217,31 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
             logger.error(f"Error analyzing {stock.get('ticker', 'unknown')}: {e}")
             print(f"{stock.get('name', stock.get('ticker', 'Unknown')):<30} | {'❌ Error':<20} | {'':<10}")
     
-    # Create markdown output
+    # Create markdown output for the summary table
     markdown = f"# Portfolio Value Investing Analysis\n\nAnalysis Date: {analysis_date}\n\n"
-    markdown += "| Stock (Ticker) | Signal | Rationale | Valuation Assessment | Key Risk Factors |\n"
-    markdown += "|----------------|--------|-----------|----------------------|------------------|\n"
+    markdown += "| Stock (Ticker) | Signal | Rationale | Valuation Assessment | Key Risk Factors | Detailed Analysis |\n"
+    markdown += "|----------------|--------|-----------|----------------------|------------------|-------------------|\n"
     
     for result in analysis_results:
         # Ensure all fields are properly formatted for markdown table
         name_with_ticker = f"{result['name']} ({result['ticker']})"
         signal = result['signal']
         
-        # Clean and format rationale
-        rationale = result.get('rationale', 'Analysis unavailable')
+        # Use truncated versions for the summary table
+        rationale = result.get('rationale_truncated', 'Analysis unavailable')
         rationale = rationale.replace('\n', ' ').replace('|', '/').strip()
-        if len(rationale) > 300:
-            rationale = rationale[:297] + "..."
-            
-        # Clean and format valuation assessment
-        valuation = result.get('valuation_assessment', 'Unknown')
-        valuation = valuation.replace('\n', ' ').replace('|', '/').strip()
-        if len(valuation) > 300:
-            valuation = valuation[:297] + "..."
-            
-        # Clean and format risk factors
-        risks = result.get('key_risk_factors', 'None identified')
-        risks = risks.replace('\n', ' ').replace('|', '/').strip()
-        if len(risks) > 300:
-            risks = risks[:297] + "..."
         
-        markdown += f"| {name_with_ticker} | {signal} | {rationale} | {valuation} | {risks} |\n"
+        valuation = result.get('valuation_assessment_truncated', 'Unknown')
+        valuation = valuation.replace('\n', ' ').replace('|', '/').strip()
+        
+        risks = result.get('key_risk_factors_truncated', 'None identified')
+        risks = risks.replace('\n', ' ').replace('|', '/').strip()
+        
+        # Add link to detailed analysis file in model-specific folder
+        ticker_filename = result['ticker'].replace('.', '_')
+        detail_link = f"[View Details](companies/{model_short_name}/{ticker_filename}.md)"
+        
+        markdown += f"| {name_with_ticker} | {signal} | {rationale} | {valuation} | {risks} | {detail_link} |\n"
     
     markdown += "\n## Analysis Summary\n\n"
     if model.startswith("claude"):
@@ -346,18 +380,100 @@ def build_analysis_prompt(company_data):
     name = company_data.get('name', 'Unknown Company')
     ticker = company_data.get('ticker', 'UNKNOWN')
     exchange = company_data.get('exchange', 'UNKNOWN')
+    market_cap = company_data.get('marketCapUSD', 'Unknown')
     
-    # Extract key financial data
-    financial_metrics = {}
+    # Format market cap for readability
+    if isinstance(market_cap, (int, float)):
+        market_cap_formatted = f"${market_cap / 1000000000:.2f} billion" if market_cap >= 1000000000 else f"${market_cap / 1000000:.2f} million"
+    else:
+        market_cap_formatted = "Unknown"
+    
+    # Extract financial metrics from statements
     statements = company_data.get('statements', [])
     
+    # Initialize metrics dictionaries
+    valuation_metrics = {}
+    performance_metrics = {}
+    health_metrics = {}
+    growth_metrics = {}
+    
+    # Extract important information from statements
+    pe_ratio = None
+    pb_ratio = None
+    intrinsic_value_discount = None
+    profit_margin = None
+    debt_equity = None
+    roe = None
+    dividend_yield = None
+    cash_flow = None
+    revenue_growth = None
+    profit_growth = None
+    
+    # Process statements to extract key financial data
     for statement in statements:
-        key = statement.get('key', '')
+        name = statement.get('name', '')
+        description = statement.get('description', '')
         value = statement.get('value')
         
-        if key and value is not None:
-            financial_metrics[key] = value
-    
+        # Valuation metrics
+        if "Price-To-Earnings" in description and "compared to" in description:
+            if "peer average" in description:
+                # Extract PE ratio
+                try:
+                    pe_ratio = description.split("Price-To-Earnings Ratio (")[1].split("x")[0]
+                    valuation_metrics['pe_ratio'] = pe_ratio + "x"
+                    
+                    # Extract peer average PE
+                    peer_pe = description.split("peer average (")[1].split("x")[0]
+                    valuation_metrics['peer_average_pe'] = peer_pe + "x"
+                except (IndexError, ValueError):
+                    pass
+            elif "estimated Fair Price-To-Earnings Ratio" in description:
+                try:
+                    # Extract fair PE ratio
+                    fair_pe = description.split("estimated Fair Price-To-Earnings Ratio (")[1].split("x")[0]
+                    valuation_metrics['fair_pe_ratio'] = fair_pe + "x"
+                except (IndexError, ValueError):
+                    pass
+        
+        # Intrinsic value
+        if "Trading at" in description and "below our estimate of its fair value" in description:
+            try:
+                discount = description.split("Trading at ")[1].split("% below")[0]
+                intrinsic_value_discount = discount + "%"
+                valuation_metrics['discount_to_fair_value'] = intrinsic_value_discount
+            except (IndexError, ValueError):
+                pass
+        
+        # Profit margins
+        if "profit margins" in description:
+            try:
+                current_margin = description.split("current net profit margins (")[1].split("%")[0]
+                performance_metrics['profit_margin'] = current_margin + "%"
+                
+                # Previous year margin
+                prev_margin = description.split("lower than last year (")[1].split("%")[0] if "lower than last year" in description else None
+                if prev_margin:
+                    performance_metrics['previous_profit_margin'] = prev_margin + "%"
+            except (IndexError, ValueError):
+                pass
+        
+        # Health metrics
+        if name == "HasNetCash":
+            health_metrics['net_cash_position'] = "Positive" if value is True else "Negative"
+        
+        # Categorize other statements
+        if "RISKS" in statement.get('area', ''):
+            # Risk statements
+            if value is not None and description:
+                key = name.replace('Has', '').replace('Is', '')
+                health_metrics[key] = description
+        elif "GROWTH" in statement.get('area', '') or "FUTURE" in statement.get('area', ''):
+            # Growth statements
+            if value is not None and description:
+                key = name.replace('Has', '').replace('Is', '')
+                growth_metrics[key] = description
+        
     # Build the prompt
     prompt = f"""
     As a value investing expert, analyze this stock with Benjamin Graham and Warren Buffett's principles:
@@ -366,39 +482,66 @@ def build_analysis_prompt(company_data):
     Name: {name}
     Ticker: {ticker}
     Exchange: {exchange}
+    Market Cap: {market_cap_formatted}
     
-    KEY FINANCIAL METRICS:
-    """
+    VALUATION METRICS:"""
     
-    # Add selected important metrics if available
-    key_metrics = [
-        ('pe_ratio', 'P/E Ratio'),
-        ('pb_ratio', 'Price to Book'),
-        ('debt_to_equity', 'Debt to Equity'),
-        ('roe', 'Return on Equity'),
-        ('profit_margin', 'Profit Margin'),
-        ('dividend_yield', 'Dividend Yield'),
-        ('free_cash_flow', 'Free Cash Flow'),
-        ('interest_coverage', 'Interest Coverage'),
-        ('current_ratio', 'Current Ratio'),
-        ('earnings_growth_5yr', '5-Year Earnings Growth'),
-        ('revenue_growth_5yr', '5-Year Revenue Growth'),
-        ('fcf_growth_5yr', '5-Year FCF Growth')
-    ]
-    
-    for key, label in key_metrics:
-        if key in financial_metrics:
-            prompt += f"- {label}: {financial_metrics[key]}\n"
-    
-    # Add all remaining financial metrics
-    prompt += "\nADDITIONAL FINANCIAL DATA:\n"
-    for key, value in financial_metrics.items():
-        if key not in [k for k, _ in key_metrics]:
-            # Format the key name for better readability
+    # Add valuation metrics if available
+    if valuation_metrics:
+        for key, value in valuation_metrics.items():
             formatted_key = key.replace('_', ' ').title()
-            prompt += f"- {formatted_key}: {value}\n"
+            prompt += f"\n- {formatted_key}: {value}"
+    else:
+        prompt += "\n- No specific valuation metrics available"
+    
+    # Add performance metrics
+    prompt += "\n\nPERFORMANCE METRICS:"
+    if performance_metrics:
+        for key, value in performance_metrics.items():
+            formatted_key = key.replace('_', ' ').title()
+            prompt += f"\n- {formatted_key}: {value}"
+    else:
+        prompt += "\n- No specific performance metrics available"
+    
+    # Add health metrics
+    prompt += "\n\nFINANCIAL HEALTH:"
+    if health_metrics:
+        for key, value in health_metrics.items():
+            if isinstance(value, bool):
+                value = "Yes" if value else "No"
+            formatted_key = key.replace('_', ' ').title()
+            prompt += f"\n- {formatted_key}: {value}"
+    else:
+        prompt += "\n- No specific health metrics available"
+    
+    # Add growth metrics
+    prompt += "\n\nGROWTH INDICATORS:"
+    if growth_metrics:
+        for key, value in growth_metrics.items():
+            if isinstance(value, bool):
+                value = "Yes" if value else "No"
+            formatted_key = key.replace('_', ' ').title()
+            prompt += f"\n- {formatted_key}: {value}"
+    else:
+        prompt += "\n- No specific growth metrics available"
+    
+    # Add key statements
+    prompt += "\n\nKEY STATEMENTS:"
+    statements_added = 0
+    for statement in statements:
+        # Only include statements with meaningful descriptions
+        if statement.get('description') and len(statement.get('description', '')) > 15:
+            area = statement.get('area', '')
+            description = statement.get('description', '')
+            prompt += f"\n- [{area}] {description}"
+            statements_added += 1
+            
+            # Limit to most important statements to avoid overwhelming the model
+            if statements_added >= 15:
+                break
     
     prompt += """
+    
     REQUIRED ANALYSIS FORMAT:
     Your analysis must include exactly these four sections with these specific headings:
 
@@ -422,6 +565,7 @@ def build_analysis_prompt(company_data):
     The main risks that could negatively impact this investment thesis.
 
     IMPORTANT: Keep each section concise and focused. Do not include additional sections or sub-headings.
+    Refer specifically to the financial metrics provided above in your analysis.
     """
     
     return prompt
@@ -433,7 +577,7 @@ def extract_analysis_components(response_text):
         response_text (str): The full text response from the AI
         
     Returns:
-        tuple: (signal, rationale, valuation, risk_factors)
+        tuple: (signal, rationale, valuation, risk_factors, rationale_truncated, valuation_truncated, risk_factors_truncated)
     """
     signal = "UNKNOWN"
     rationale = "Analysis unavailable"
@@ -518,22 +662,27 @@ def extract_analysis_components(response_text):
         elif "HOLD" in signal_text:
             signal = "HOLD"
     
+    # Store full versions without truncation
     if "rationale" in sections:
         rationale = sections["rationale"].strip()
-        # Trim to reasonable length for table display
-        if len(rationale) > 300:
-            rationale = rationale[:297] + "..."
     
     if "valuation" in sections:
         valuation = sections["valuation"].strip()
-        # Trim to reasonable length for table display
-        if len(valuation) > 300:
-            valuation = valuation[:297] + "..."
     
     if "risks" in sections:
         risk_factors = sections["risks"].strip()
-        # Trim to reasonable length for table display
-        if len(risk_factors) > 300:
-            risk_factors = risk_factors[:297] + "..."
     
-    return signal, rationale, valuation, risk_factors 
+    # Create truncated versions for the summary table
+    rationale_truncated = rationale
+    if len(rationale) > 300:
+        rationale_truncated = rationale[:297] + "..."
+    
+    valuation_truncated = valuation
+    if len(valuation) > 300:
+        valuation_truncated = valuation[:297] + "..."
+    
+    risk_factors_truncated = risk_factors
+    if len(risk_factors) > 300:
+        risk_factors_truncated = risk_factors[:297] + "..."
+    
+    return signal, rationale, valuation, risk_factors, rationale_truncated, valuation_truncated, risk_factors_truncated 
