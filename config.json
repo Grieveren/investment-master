@@ -18,6 +18,7 @@
     },
     "output": {
         "raw_data_file": "data/raw/api_data.json",
-        "analysis_file": "data/processed/portfolio_analysis.md"
+        "analysis_file": "data/processed/portfolio_analysis.md",
+        "companies_dir": "data/processed/companies"
     }
 } 

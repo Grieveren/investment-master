@@ -66,6 +66,8 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 ├── data/                       # Data directory
 │   ├── raw/                    # Raw API data
 │   └── processed/              # Processed analysis results
+│       ├── portfolio_analysis.md # Portfolio summary table
+│       └── companies/          # Individual company analysis files
 ├── logs/                       # Log files
 └── utils/                      # Utility modules
     ├── api.py                  # API interaction functions
@@ -83,6 +85,24 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 3. All financial statements (166 per company) are processed and sent to either OpenAI's o3-mini model or Anthropic's Claude model
 4. The AI analyzes the data using value investing principles (P/E ratio, P/B ratio, debt levels, etc.)
 5. A comprehensive analysis is generated with buy/sell/hold signals, rationales, and risk factors
+6. Results are saved in both a summary table (`portfolio_analysis_[model].md`) and detailed individual company files in the `companies/[model]` directory
+7. A changelog entry is automatically added to track the analysis run
+
+## Changelog
+
+The project includes a comprehensive changelog system to help track progress and make it easier to pick up where you left off after coding sessions:
+
+- **Automatic Updates**: Each analysis run automatically adds an entry to the changelog
+- **Manual Updates**: You can manually update the changelog using the `update_changelog.py` script:
+
+```
+./update_changelog.py --title "Your Change Title" --description "Detailed description" \
+                      --files "file1.py" "file2.py" \
+                      --tasks "Task 1 completed" "Task 2 completed" \
+                      --next "Next step 1" "Next step 2"
+```
+
+The changelog maintains a chronological record of all changes, making it easy to see what's been done and what's next.
 
 ## AI Models
 
@@ -117,7 +137,12 @@ The analysis provides signals for each stock:
 - **HOLD**: Fairly valued stocks or those with mixed signals
 - **SELL**: Overvalued stocks or those with concerning fundamentals
 
-Each recommendation includes a detailed rationale, valuation assessment, and risk factors to consider.
+Each recommendation includes:
+1. A summary table with links to detailed analysis
+2. Individual company analysis files with complete untruncated information including:
+   - Detailed rationale
+   - Full valuation assessment 
+   - Comprehensive risk factors
 
 ## Testing
 

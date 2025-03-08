@@ -34,6 +34,8 @@ Usage:
 import os
 import sys
 import argparse
+import datetime
+import time
 from dotenv import load_dotenv
 from utils.logger import logger
 from utils.config import config
@@ -41,6 +43,7 @@ from utils.portfolio import parse_portfolio
 from utils.api import fetch_all_companies
 from utils.analysis import create_openai_client, create_anthropic_client, get_value_investing_signals
 from utils.file_operations import save_json_data, save_markdown
+from utils.changelog import add_analysis_run_to_changelog, add_changelog_entry
 
 def ensure_directories_exist():
     """Ensure all required directories exist."""
@@ -65,15 +68,18 @@ def parse_args():
 
 def main():
     """Main function to analyze a portfolio."""
+    print("STARTING: Portfolio Analyzer")
+    print(f"Working directory: {os.getcwd()}")
+    print(f"Python version: {sys.version}")
+    print()
+    
+    # Record the start time
+    start_time = datetime.datetime.now()
+    
     parser = argparse.ArgumentParser(description="Analyze a portfolio of stocks from a value investing perspective")
     parser.add_argument("--data-only", action="store_true", help="Only fetch and save data, skip analysis")
     parser.add_argument("--model", type=str, help="AI model to use (o3-mini or claude-3-7)")
     args = parser.parse_args()
-    
-    # Print startup banner
-    print("STARTING: Portfolio Analyzer")
-    print(f"Working directory: {os.getcwd()}")
-    print(f"Python version: {sys.version}")
     
     if args.data_only:
         print("\nRunning in DATA-ONLY mode (will not run analysis)")
@@ -170,12 +176,26 @@ def main():
     logger.info("Generating value investing analysis...")
     analysis = get_value_investing_signals(portfolio_data, api_data, openai_client, anthropic_client, model)
     
-    # Save analysis to file
-    output_file = config["output"]["analysis_file"]
+    # Save analysis to file with model name in filename
+    model_short_name = "openai" if model == "o3-mini" else "claude"
+    output_file_base = os.path.splitext(config["output"]["analysis_file"])[0]  # Remove extension
+    output_file = f"{output_file_base}_{model_short_name}.md"
+    
     print(f"Saving analysis to {output_file}...")
     save_markdown(analysis, output_file)
     logger.info(f"Analysis saved to {output_file}")
     print(f"Analysis saved to {output_file}")
+    
+    # Calculate total elapsed time
+    elapsed_time = (datetime.datetime.now() - start_time).total_seconds()
+    
+    # Add to changelog
+    add_analysis_run_to_changelog(
+        model=model,
+        num_stocks=len(portfolio_data),
+        start_time=start_time,
+        elapsed_time=elapsed_time
+    )
     
     print("FINISHED: Portfolio Analyzer")
 
