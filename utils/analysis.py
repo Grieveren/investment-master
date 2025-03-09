@@ -530,6 +530,11 @@ def format_analysis_to_markdown(stock_analyses):
 def build_analysis_prompt(company_data):
     """Build a comprehensive analysis prompt based on the company data.
     
+    This function extracts key financial metrics from the company data and formats
+    them into a structured prompt for AI analysis. It includes special handling
+    for price extraction using a priority-based approach to ensure accurate current
+    stock prices are included.
+    
     Args:
         company_data (dict): Company data including financial statements
         

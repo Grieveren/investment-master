@@ -167,10 +167,24 @@ The portfolio optimization provides:
 
 ## Testing
 
-The project includes unit tests for key functionality:
+The project includes unit tests and debugging tools:
+
 ```
+# Run unit tests
 python -m unittest discover tests
+
+# Test single stock analysis
+python test_single_stock_analysis.py --ticker BRK.B
+
+# Test portfolio optimization
+python test_portfolio_optimization.py
+
+# Debug price data extraction
+python test_price_data.py
+python test_price_extraction.py
 ```
+
+These testing and debugging tools help ensure the system correctly processes financial data and extracts critical information like current stock prices accurately.
 
 ## License
 

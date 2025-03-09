@@ -1,5 +1,18 @@
 # Changelog
 
+## 2025-03-09: Fixed Price Extraction in Analysis Module
+
+Fixed critical issue with price extraction in stock analysis.
+- Improved price extraction logic to prioritize the IsUndervaluedBasedOnDCF statement
+- Fixed incorrect price display in analysis output (now shows $495.62 instead of $1.0)
+- Added improved regex patterns to correctly identify stock prices
+- Created debugging tools to investigate API data structure
+
+### Files Changed
+- `utils/analysis.py`
+- `test_price_data.py`
+- `test_price_extraction.py`
+
 ## 2025-03-09: Portfolio Analysis Run (Anthropic Claude)
 
 Ran portfolio analysis on 11 stocks using Anthropic Claude model.
