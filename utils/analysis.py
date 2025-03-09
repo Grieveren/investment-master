@@ -578,8 +578,9 @@ def build_analysis_prompt(company_data):
     for statement in statements:
         if statement.get('name') == 'IsUndervaluedBasedOnDCF':
             description = statement.get('description', '')
-            # Extract the price from "BRK.B ($495.62) is trading below..."
-            price_match = re.search(r'\$(\d+\.\d+)\)', description)
+            # Extract the price from ticker with price in parentheses - handles both $ and € symbols
+            # E.g., "BRK.B ($495.62)" or "ALV (€343.2)"
+            price_match = re.search(r'[($€](\d+\.?\d*)[)]', description)
             if price_match:
                 try:
                     current_price = float(price_match.group(1))
