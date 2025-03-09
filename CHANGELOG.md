@@ -1,5 +1,17 @@
 # Changelog
 
+## 2025-03-09: Increased Claude Thinking Budget for Enhanced Analysis
+
+Increased Claude's thinking budget from 16,000 to 21,333 tokens for more comprehensive analysis.
+
+### Enhancements
+- Increased thinking budget allows Claude to perform more in-depth analysis
+- Optimized for the maximum token capacity of Claude 3.7 Sonnet
+- Enhances all analysis features that use Claude including portfolio optimization
+
+### Files Changed
+- `config.json`
+
 ## 2025-03-09: Portfolio Analysis Run (Anthropic Claude)
 
 Ran portfolio analysis on 11 stocks using Anthropic Claude model.
