@@ -721,17 +721,17 @@ def build_analysis_prompt(company_data):
                     'description': description,
                     'value': value
                 }
-    
+        
     # Build the prompt
     prompt = f"""
 As a value investing expert, analyze this company using Benjamin Graham and Warren Buffett's principles.
 
 ## COMPANY INFORMATION
-Name: {name}
-Ticker: {ticker}
-Exchange: {exchange}
+    Name: {name}
+    Ticker: {ticker}
+    Exchange: {exchange}
 Current Price: {current_price_formatted}
-Market Cap: {market_cap_formatted}
+    Market Cap: {market_cap_formatted}
 Currency: {currency}
 
 ## FINANCIAL METRICS SUMMARY
@@ -812,7 +812,7 @@ Based on the financial data provided, conduct a thorough value investing analysi
 IMPORTANT: Always include the current price and your estimate of intrinsic value in your analysis.
 
 Then provide a clear BUY, SELL, or HOLD recommendation with detailed rationale.
-"""
+    """
     
     return prompt
 

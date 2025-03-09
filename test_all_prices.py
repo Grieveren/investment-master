@@ -91,9 +91,9 @@ def main():
                 
             if dcf_statement:
                 logger.info(f"  DCF statement: {dcf_statement.get('description')}")
-                # Try to extract price from "BRK.B ($495.62) is trading below..."
+                # Try to extract price from "BRK.B ($495.62) is trading below..." or "ALV (€343.2)"
                 desc = dcf_statement.get('description', '')
-                price_match = re.search(r'\$(\d+\.\d+)\)', desc)
+                price_match = re.search(r'[\$€]([0-9.,]+)\)', desc)
                 if price_match:
                     logger.info(f"  Extracted price: ${price_match.group(1)}")
                 else:

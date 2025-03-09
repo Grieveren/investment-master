@@ -1,98 +1,92 @@
 """
-Test script to debug Euro price extraction.
+Specific test for extracting Euro currency price from API data.
 """
 
 import json
 import re
+from dotenv import load_dotenv
 from utils.config import config
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("euro_price_test")
 
 def main():
-    """Test Euro price extraction with various regex patterns."""
-    print("STARTING: Euro Price Extraction Test")
+    """Test Euro price extraction."""
+    logger.info("STARTING: Euro Price Extraction Test")
     
-    # Load API data 
-    with open(config["output"]["raw_data_file"], 'r') as f:
-        api_data = json.load(f)
+    # Load API data from file
+    api_data_file = config["output"]["raw_data_file"]
+    try:
+        with open(api_data_file, 'r') as f:
+            api_data = json.load(f)
+            logger.info(f"Loaded API data from {api_data_file}")
+    except Exception as e:
+        logger.error(f"Error loading API data: {e}")
+        return
     
     # Get Allianz data
-    alv_data = api_data.get("Allianz SE", {})
+    company_name = "Allianz SE"
+    ticker = "ALV"
+    
+    if company_name not in api_data:
+        logger.error(f"Could not find data for {company_name}")
+        return
+        
+    company_data = api_data[company_name]
+    logger.info(f"Found data for {company_name}")
+    
+    # Extract statements
+    statements = []
+    if 'statements' in company_data:
+        statements = company_data['statements']
+    elif 'data' in company_data and 'companyByExchangeAndTickerSymbol' in company_data['data']:
+        company_obj = company_data['data']['companyByExchangeAndTickerSymbol']
+        statements = company_obj.get('statements', [])
+    
+    logger.info(f"Found {len(statements)} statements")
     
     # Find DCF statement
     dcf_statement = None
-    statements = []
-    
-    if 'statements' in alv_data:
-        statements = alv_data['statements']
-    elif 'data' in alv_data and 'companyByExchangeAndTickerSymbol' in alv_data['data']:
-        company_obj = alv_data['data']['companyByExchangeAndTickerSymbol']
-        statements = company_obj.get('statements', [])
-    
     for statement in statements:
         if statement.get('name') == 'IsUndervaluedBasedOnDCF':
             dcf_statement = statement
             break
-            
+    
     if dcf_statement:
-        desc = dcf_statement.get('description', '')
-        print(f"DCF statement: {desc}")
+        description = dcf_statement.get('description', '')
+        logger.info(f"DCF statement: {description}")
         
         # Try different regex patterns
-        print("\nTesting different regex patterns:")
+        patterns = [
+            (r'[\(\$€](\d+\.?\d*)[\)]', "Standard"),
+            (r'\(€(\d+\.?\d*)\)', "Euro specific"),
+            (r'\(€(\d+[.,]\d*)\)', "Euro with comma or period"),
+            (r'ALV \(€(\d+\.?\d*)\)', "ALV Euro specific"),
+            (r'\([€$]([0-9.,]+)\)', "Currency in parentheses"),
+            (r'[\$€]([0-9.,]+)', "Any currency symbol"),
+        ]
         
-        # Original pattern
-        pattern1 = r'\$(\d+\.\d+)\)'
-        match1 = re.search(pattern1, desc)
-        print(f"Pattern 1 (original dollar): {pattern1}")
-        print(f"  Match: {match1.group(1) if match1 else 'No match'}")
-        
-        # Enhanced pattern handling both $ and €
-        pattern2 = r'[($€](\d+\.?\d*)[)]'
-        match2 = re.search(pattern2, desc)
-        print(f"Pattern 2 (enhanced): {pattern2}")
-        print(f"  Match: {match2.group(1) if match2 else 'No match'}")
-        
-        # Pattern with explicit euro symbol
-        pattern3 = r'€(\d+\.?\d*)'
-        match3 = re.search(pattern3, desc)
-        print(f"Pattern 3 (euro specific): {pattern3}")
-        print(f"  Match: {match3.group(1) if match3 else 'No match'}")
-        
-        # Pattern looking for any digit sequence after currency
-        pattern4 = r'[€$]([\d,.]+)'
-        match4 = re.search(pattern4, desc)
-        print(f"Pattern 4 (any digits after currency): {pattern4}")
-        print(f"  Match: {match4.group(1) if match4 else 'No match'}")
-        
-        # Pattern checking Unicode representation
-        pattern5 = r'[\u20AC$](\d+\.?\d*)'
-        match5 = re.search(pattern5, desc)
-        print(f"Pattern 5 (Unicode): {pattern5}")
-        print(f"  Match: {match5.group(1) if match5 else 'No match'}")
-        
-        # Pattern for the exact character sequence (debugging)
-        print("\nCharacter by Character Analysis:")
-        for i, c in enumerate(desc):
-            if i > 0 and i < 20:  # Focus on the beginning
-                print(f"Character at position {i}: '{c}' (ord: {ord(c)})")
-        
-        # Final recommended pattern
-        pattern_final = r'[\u20AC$€]([0-9.,]+)'
-        match_final = re.search(pattern_final, desc)
-        print(f"\nFinal recommended pattern: {pattern_final}")
-        if match_final:
-            price_str = match_final.group(1).replace(',', '.')
-            try:
-                price = float(price_str)
-                print(f"  Extracted price: {price}")
-            except ValueError:
-                print(f"  Could not convert to float: {price_str}")
-        else:
-            print("  No match with final pattern")
+        for pattern, name in patterns:
+            matches = re.findall(pattern, description)
+            logger.info(f"Pattern '{name}': {pattern}")
+            logger.info(f"  Matches: {matches}")
             
+            # If we have matches, try to convert to float
+            if matches:
+                for match in matches:
+                    try:
+                        # Handle European number format (replace comma with period)
+                        value = match.replace(',', '.')
+                        price = float(value)
+                        logger.info(f"  Converted to price: {price}")
+                    except ValueError:
+                        logger.info(f"  Could not convert '{match}' to float")
     else:
-        print("DCF statement not found for Allianz")
+        logger.info("No DCF statement found")
     
-    print("FINISHED: Euro Price Extraction Test")
+    logger.info("FINISHED: Euro Price Extraction Test")
 
 if __name__ == "__main__":
+    load_dotenv()
     main() 
