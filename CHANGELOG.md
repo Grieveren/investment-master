@@ -302,6 +302,29 @@ Enhanced the portfolio analyzer to address the truncation issue in company analy
 - Add visualization of portfolio changes before and after optimization
 - Implement version tracking to compare analyses over time
 
+## 2025-03-09: Enhanced Claude Individual Stock Analysis
+
+Significantly improved the Claude individual stock analysis capabilities to maximize quality and depth:
+
+### Enhancements
+- Redesigned analysis prompt to include ALL financial statements (166 per company) with full details
+- Expanded Claude's system prompt to utilize extended thinking time more effectively
+- Added comprehensive section formatting with severity indicators and outcome details
+- Enhanced output with new sections: Competitive Analysis, Management Assessment, Financial Health, Growth Prospects, and Risk Factors
+- Updated extraction logic to capture all new analysis components
+- Added detailed information about valuation methodologies used
+
+### Files Changed
+- `utils/analysis.py`
+- `config.json`
+
+### Impact
+- More thorough individual stock analyses with deeper insights
+- Comprehensive competitive position assessment
+- Enhanced risk evaluation with specific risk factors
+- More transparent valuation methodology explanations
+- Better integration with the portfolio optimization process
+
 ## 2025-03-09: Enhanced Claude Portfolio Optimization
 
 Significantly improved the Claude holistic portfolio optimization feature to maximize analysis quality and depth:

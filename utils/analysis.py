@@ -84,35 +84,19 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     Returns:
         dict: Dictionary containing the markdown analysis and structured stock results
     """
-    # Check if appropriate client is available based on model
+    model_short_name = "openai" if model == "o3-mini" else "claude"
+    logger.info(f"Starting value investing analysis using {model} model")
+    
     if model.startswith("claude"):
-        if anthropic_client is None:
-            return {
-                "markdown": "Error: Anthropic client not initialized. Please check your API key.",
-                "stocks": []
-            }
-    else:
-        if openai_client is None:
-            return {
-                "markdown": "Error: OpenAI client not initialized. Please check your API key.",
-                "stocks": []
-            }
-        
-    # Process each stock individually
+        thinking_budget = config["claude"].get("thinking_budget", 16000)
+        logger.info(f"Using Claude with enhanced analysis mode and {thinking_budget} token thinking budget")
+        print(f"Enhanced Analysis Mode: Using Claude with {thinking_budget} token thinking budget")
+        print("This will provide more comprehensive and nuanced analysis, but may take longer per company")
+    
     stock_analyses = []
-    
-    total_stocks = len(portfolio_data)
-    print(f"\n{'='*50}")
-    print(f"ANALYZING {total_stocks} STOCKS WITH {model}")
-    print(f"{'='*50}")
-    
     analysis_date = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    print(f"{'Stock':<30} | {'Status':<20} | {'Signal':<10}")
-    print(f"{'-'*30} | {'-'*20} | {'-'*10}")
-    
-    # Create directories for storing individual company analyses
-    model_short_name = "openai" if model == "o3-mini" else "claude"
+    # Create output directory for individual company analyses
     model_companies_dir = os.path.join(config["output"]["companies_dir"], model_short_name)
     os.makedirs(model_companies_dir, exist_ok=True)
     
@@ -157,9 +141,28 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
                 company_data['ticker'] = ticker
             if 'name' not in company_data:
                 company_data['name'] = name
-                
-            # Prepare the system prompt with value investing principles and consistent format
-            system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+            
+            print(f"Analyzing {name} ({ticker})...")
+            
+            # Create the user prompt with all available financial data
+            logger.info(f"Building comprehensive analysis prompt for {ticker}")
+            user_prompt = build_analysis_prompt(company_data)
+            
+            # Show prompt size to monitor token usage
+            prompt_size = len(user_prompt)
+            logger.info(f"Analysis prompt for {ticker} created: {prompt_size} characters")
+            
+            start_time = time.time()
+            
+            if model.startswith("claude"):
+                # Use Claude with enhanced analysis
+                logger.info(f"Starting enhanced Claude analysis for {ticker}")
+                print(f"  - Using enhanced analysis with full data and extended thinking time")
+                response = analyze_with_claude(user_prompt, anthropic_client, model=config["claude"]["model"])
+            else:
+                # Use OpenAI for analysis
+                logger.info(f"Starting OpenAI analysis for {ticker}")
+                system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
 
 You will produce a detailed value investing analysis report with the following structure:
 
@@ -191,17 +194,6 @@ Margin of Safety: [percentage]%
 
 Follow this format exactly as it will be parsed programmatically. Your analysis should be based on the financial statements and data provided, evaluating whether the stock is undervalued, fairly valued, or overvalued according to value investing principles.
 """
-            
-            # Create the user prompt with all available financial data
-            user_prompt = build_analysis_prompt(company_data)
-            
-            start_time = time.time()
-            
-            if model.startswith("claude"):
-                # Use Claude for analysis
-                response = analyze_with_claude(user_prompt, anthropic_client, model=config["claude"]["model"])
-            else:
-                # Use OpenAI for analysis
                 response = analyze_with_openai(system_prompt, user_prompt, openai_client, model=config["openai"]["model"])
             
             elapsed_time = time.time() - start_time
@@ -245,14 +237,28 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
             
             # Add price targets if available
             price_targets = components.get('price_targets', {})
-            if any(price_targets.values()):
+            if price_targets:
                 company_markdown += "## Price Analysis\n\n"
-                if price_targets.get('current'):
-                    company_markdown += f"**Current Price:** ${price_targets.get('current')}\n\n"
-                if price_targets.get('intrinsic'):
-                    company_markdown += f"**Intrinsic Value:** ${price_targets.get('intrinsic')}\n\n"
-                if price_targets.get('margin_of_safety') is not None:
-                    company_markdown += f"**Margin of Safety:** {price_targets.get('margin_of_safety')}%\n\n"
+                
+                # Current price
+                current_price = price_targets.get('current_price')
+                if current_price is not None:
+                    company_markdown += f"**Current Price:** ${current_price:.2f}\n\n"
+                
+                # Intrinsic value
+                intrinsic_value = price_targets.get('intrinsic_value')
+                if intrinsic_value is not None:
+                    company_markdown += f"**Intrinsic Value:** ${intrinsic_value:.2f}\n\n"
+                
+                # Margin of safety
+                margin_of_safety = price_targets.get('margin_of_safety')
+                if margin_of_safety is not None:
+                    company_markdown += f"**Margin of Safety:** {margin_of_safety:.1f}%\n\n"
+                
+                # Valuation method (new field from enhanced analysis)
+                valuation_method = price_targets.get('valuation_method')
+                if valuation_method:
+                    company_markdown += f"**Valuation Method(s):** {valuation_method}\n\n"
             
             # Add strengths if available
             strengths = components.get('strengths', [])
@@ -270,21 +276,41 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
                     company_markdown += f"- {weakness}\n"
                 company_markdown += "\n"
             
-            # Add metrics if available
-            metrics = components.get('metrics', {})
-            if metrics:
-                company_markdown += "## Key Metrics\n\n"
-                for key, value in metrics.items():
-                    # Format the metric name for better readability
-                    metric_name = key.replace('_', ' ').title()
-                    company_markdown += f"**{metric_name}:** {value}\n"
-                company_markdown += "\n"
+            # Add competitive analysis if available (new section from enhanced analysis)
+            competitive_analysis = components.get('competitive_analysis', '')
+            if competitive_analysis:
+                company_markdown += "## Competitive Analysis\n\n"
+                company_markdown += f"{competitive_analysis}\n\n"
             
-            # Add rationale if available 
+            # Add management assessment if available (new section from enhanced analysis)
+            management_assessment = components.get('management_assessment', '')
+            if management_assessment:
+                company_markdown += "## Management Assessment\n\n"
+                company_markdown += f"{management_assessment}\n\n"
+            
+            # Add financial health if available (new section from enhanced analysis)
+            financial_health = components.get('financial_health', '')
+            if financial_health:
+                company_markdown += "## Financial Health\n\n"
+                company_markdown += f"{financial_health}\n\n"
+            
+            # Add growth prospects if available (new section from enhanced analysis)
+            growth_prospects = components.get('growth_prospects', '')
+            if growth_prospects:
+                company_markdown += "## Growth Prospects\n\n"
+                company_markdown += f"{growth_prospects}\n\n"
+            
+            # Add investment rationale if available
             rationale = components.get('rationale', '')
             if rationale:
                 company_markdown += "## Investment Rationale\n\n"
-            company_markdown += f"{rationale}\n\n"
+                company_markdown += f"{rationale}\n\n"
+            
+            # Add risk factors if available (new section from enhanced analysis)
+            risk_factors = components.get('risk_factors', '')
+            if risk_factors:
+                company_markdown += "## Risk Factors\n\n"
+                company_markdown += f"{risk_factors}\n\n"
             
             # Add full AI response as a reference
             company_markdown += "## Full Analysis\n\n"
@@ -297,7 +323,9 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
             # Add footer with model information
             company_markdown += "---\n\n"
             if model.startswith("claude"):
-                company_markdown += "This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with extended thinking. "
+                thinking_budget = config["claude"].get("thinking_budget", 16000)
+                company_markdown += f"This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with {thinking_budget} tokens of thinking budget. "
+                company_markdown += "The enhanced analysis includes comprehensive evaluation of all available financial data. "
             else:
                 company_markdown += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's o3-mini model. "
             company_markdown += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
@@ -415,8 +443,18 @@ def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219")
     try:
         thinking_budget = config["claude"].get("thinking_budget", 16000)
         
-        # Updated system prompt with explicit formatting instructions that match our extraction patterns
+        # Enhanced system prompt with detailed guidance for using extended thinking time
         system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+
+You have been given extended thinking time to perform an exceptionally thorough analysis of a company. Use this time to:
+
+1. Carefully examine all financial statements and metrics provided
+2. Calculate intrinsic value using multiple approaches (DCF, multiples, etc.)
+3. Assess competitive advantages and durability of the business model
+4. Evaluate management quality and capital allocation decisions
+5. Consider industry dynamics, competitive threats, and macroeconomic factors
+6. Identify potential catalysts and risks not explicitly mentioned in the data
+7. Calculate a reasonable margin of safety based on risk factors
 
 You will produce a detailed value investing analysis report with the following structure:
 
@@ -438,18 +476,36 @@ You will produce a detailed value investing analysis report with the following s
 - [Weakness 2]
 - [Additional weaknesses...]
 
+## Competitive Analysis
+[One paragraph assessment of the company's competitive position and moat]
+
+## Management Assessment
+[One paragraph evaluation of management quality and capital allocation]
+
+## Financial Health
+[Analysis of balance sheet, cash flow, and financial stability]
+
+## Growth Prospects
+[Analysis of growth drivers, market opportunities, and threats]
+
 ## Price Analysis
 Current Price: $[current price - ALWAYS include this exactly as provided in the data]
 Intrinsic Value: $[your estimated fair value]
 Margin of Safety: [percentage]%
+Valuation Method(s): [Brief description of valuation method(s) used]
 
 ## Investment Rationale
 [Detailed explanation of your recommendation, focusing on value investing principles]
 
+## Risk Factors
+[List and analysis of key risks that could impact the investment thesis]
+
 IMPORTANT: Always include the Current Price in your Price Analysis section, exactly as provided in the data. If no price is available, clearly state "Price data not available". The current price is a critical data point for any investment analysis.
 
-Follow this format exactly as it will be parsed programmatically. Your analysis should be based on the financial statements and data provided, evaluating whether the stock is undervalued, fairly valued, or overvalued according to value investing principles.
+This format will be used to guide investment decisions, so be thorough and objective. This is an enhanced analysis using comprehensive data, so provide detailed insights beyond a typical stock report.
 """
+        
+        logger.info(f"Requesting detailed company analysis from Claude ({model}) with {thinking_budget} token thinking budget...")
         
         response = client.messages.create(
             model=model,
@@ -661,311 +717,241 @@ def build_analysis_prompt(company_data):
         except (ValueError, TypeError):
             market_cap_formatted = str(market_cap)
     
-    # Organize statements by category
-    valuation_statements = []
-    financial_health_statements = []
-    performance_statements = []
-    growth_statements = []
-    dividend_statements = []
-    risk_statements = []
-    
-    for statement in statements:
-        area = statement.get('area', '').upper()
-        
-        if not statement.get('description'):
-            continue
-            
-        if 'VALUATION' in area:
-            valuation_statements.append(statement)
-        elif 'HEALTH' in area or 'DEBT' in area or 'BALANCE' in area:
-            financial_health_statements.append(statement)
-        elif 'PERFORMANCE' in area or 'PROFIT' in area or 'MARGIN' in area:
-            performance_statements.append(statement)
-        elif 'GROWTH' in area or 'FUTURE' in area:
-            growth_statements.append(statement)
-        elif 'DIVIDEND' in area or 'INCOME' in area:
-            dividend_statements.append(statement)
-        elif 'RISK' in area or 'WARNING' in area:
-            risk_statements.append(statement)
-    
-    # Extract key financial metrics
-    financial_metrics = {}
-    
-    # Key metrics to look for
-    metrics_to_extract = [
-        ('PE_Ratio', 'Price-To-Earnings'),
-        ('PB_Ratio', 'Price-To-Book'),
-        ('ROE', 'Return on Equity'),
-        ('ROA', 'Return on Assets'),
-        ('Debt_to_Equity', 'Debt to Equity'),
-        ('Dividend_Yield', 'Dividend Yield'),
-        ('Payout_Ratio', 'Payout Ratio'),
-        ('Operating_Margin', 'Operating Margin'),
-        ('Net_Margin', 'Net Profit Margin'),
-        ('Current_Ratio', 'Current Ratio'),
-        ('Quick_Ratio', 'Quick Ratio'),
-        ('EPS_Growth', 'Earnings Growth'),
-        ('Revenue_Growth', 'Revenue Growth'),
-        ('Free_Cash_Flow', 'Free Cash Flow'),
-        ('Intrinsic_Value_Discount', 'Trading at')
+    # Enhanced approach: Group statements by area, but include all of them
+    # Define the areas and create empty lists for each
+    areas = [
+        "VALUE", "HEALTH", "PERFORMANCE", "GROWTH", 
+        "DIVIDENDS", "RISK", "MANAGEMENT", "MARKET",
+        "BANK_HEALTH", "BANK_DIVIDENDS", "FUTURE", "PAST",
+        "REWARDS", "RISKS", "MISC"
     ]
     
+    area_statements = {area: [] for area in areas}
+    
+    # Distribute all statements to their respective areas
     for statement in statements:
-        description = statement.get('description', '')
-        value = statement.get('value')
-        
-        for metric_key, search_term in metrics_to_extract:
-            if search_term in description and value is not None:
-                # Store the full description to preserve context
-                financial_metrics[metric_key] = {
-                    'description': description,
-                    'value': value
-                }
-        
-    # Build the prompt
-    prompt = f"""
-As a value investing expert, analyze this company using Benjamin Graham and Warren Buffett's principles.
-
-## COMPANY INFORMATION
-    Name: {name}
-    Ticker: {ticker}
-    Exchange: {exchange}
-Current Price: {current_price_formatted}
-    Market Cap: {market_cap_formatted}
-Currency: {currency}
-
-## FINANCIAL METRICS SUMMARY
-"""
+        area = statement.get('area', '').upper()
+        if area:
+            # If this area exists in our mapping, add the statement
+            if area in area_statements:
+                area_statements[area].append(statement)
+            else:
+                # For any unknown areas, put in MISC
+                area_statements["MISC"].append(statement)
     
-    # Add extracted financial metrics
-    if financial_metrics:
-        for key, data in financial_metrics.items():
-            formatted_key = key.replace('_', ' ')
-            prompt += f"- {formatted_key}: {data['description']}\n"
-    else:
-        prompt += "- Limited specific metrics available in the data\n"
+    # Start building prompt
+    prompt = f"# Financial Analysis for {name} ({ticker})\n\n"
+    prompt += f"Exchange: {exchange}\n"
+    prompt += f"Current Price: {current_price_formatted}\n"
+    prompt += f"Market Cap: {market_cap_formatted}\n\n"
     
-    # Add detailed sections from statements
-    prompt += "\n## VALUATION\n"
-    if valuation_statements:
-        for stmt in valuation_statements[:10]:  # Limit to top 10
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited valuation data available\n"
-        
-    prompt += "\n## FINANCIAL HEALTH\n"
-    if financial_health_statements:
-        for stmt in financial_health_statements[:10]:
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited financial health data available\n"
-        
-    prompt += "\n## PERFORMANCE\n"
-    if performance_statements:
-        for stmt in performance_statements[:10]:
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited performance data available\n"
-        
-    prompt += "\n## GROWTH\n"
-    if growth_statements:
-        for stmt in growth_statements[:10]:
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited growth data available\n"
-        
-    prompt += "\n## DIVIDEND INFORMATION\n"
-    if dividend_statements:
-        for stmt in dividend_statements[:8]:
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited dividend data available\n"
-        
-    prompt += "\n## RISK FACTORS\n"
-    if risk_statements:
-        for stmt in risk_statements[:10]:
-            prompt += f"- {stmt.get('description', '')}\n"
-    else:
-        prompt += "- Limited risk factor data available\n"
+    # Add a table of contents for easier navigation
+    prompt += "## Table of Contents\n"
+    for area in areas:
+        if area_statements[area]:  # Only include areas that have statements
+            prompt += f"- {area.replace('_', ' ')}\n"
+    prompt += "\n"
     
-    # Add full raw statements data as well (with reasonable limit)
-    prompt += "\n## ALL AVAILABLE FINANCIAL STATEMENTS\n"
-    statements_count = min(len(statements), 100)  # Limit to 100 statements to avoid token limits
-    prompt += f"Showing {statements_count} of {len(statements)} total statements\n\n"
+    # Enhanced function to format a statement with full details
+    def format_statement(stmt):
+        name = stmt.get('name', 'Unnamed')
+        title = stmt.get('title', '')
+        value = stmt.get('value', 'N/A')
+        outcome = stmt.get('outcome', '')
+        description = stmt.get('description', 'No description available')
+        severity = stmt.get('severity', 0)
+        outcome_name = stmt.get('outcomeName', '')
+        
+        # Show all details for each statement with a clear structure
+        formatted = f"### {title if title else name}\n"
+        formatted += f"**Result:** {value} ({outcome_name if outcome_name else outcome})\n"
+        
+        # Add severity indicator if available (higher is more critical)
+        if severity:
+            try:
+                # Convert severity to integer if it's a string
+                if isinstance(severity, str):
+                    # Handle non-numeric severity values
+                    if severity.upper() in ('MINOR', 'LOW'):
+                        severity_int = 2
+                    elif severity.upper() in ('MODERATE', 'MEDIUM'):
+                        severity_int = 5
+                    elif severity.upper() in ('SEVERE', 'HIGH', 'CRITICAL'):
+                        severity_int = 8
+                    else:
+                        # Default if not recognized
+                        severity_int = 3
+                else:
+                    # If already a number, use it directly
+                    severity_int = int(severity)
+                
+                severity_indicator = "!" * min(severity_int, 5)  # Max 5 exclamation marks
+                formatted += f"**Severity:** {severity_indicator} ({severity_int}/10)\n"
+            except (ValueError, TypeError):
+                # If conversion fails, just skip the severity indicator
+                pass
+        
+        formatted += f"**Description:** {description}\n\n"
+        return formatted
     
-    for i, statement in enumerate(statements[:statements_count]):
-        area = statement.get('area', 'GENERAL')
-        description = statement.get('description', 'No description')
-        value = statement.get('value', 'N/A')
-        prompt += f"{i+1}. [{area}] {description} - Value: {value}\n"
+    # Add each area with formatted statements
+    for area in areas:
+        if area_statements[area]:  # Only include areas that have statements
+            prompt += f"## {area.replace('_', ' ')}\n"
+            
+            # For each statement in this area, format it completely
+            for stmt in area_statements[area]:
+                prompt += format_statement(stmt)
+            
+            prompt += "\n"
     
-    prompt += """
-## ANALYSIS TASK
-Based on the financial data provided, conduct a thorough value investing analysis, evaluating:
-1. Whether the company has a sustainable competitive advantage (moat)
-2. The quality of management and capital allocation
-3. Financial strength and stability
-4. Growth prospects and return on invested capital
-5. Current valuation relative to intrinsic value
-6. Margin of safety
-
-IMPORTANT: Always include the current price and your estimate of intrinsic value in your analysis.
-
-Then provide a clear BUY, SELL, or HOLD recommendation with detailed rationale.
-    """
+    # Add a summary of key metrics
+    prompt += "## KEY METRICS SUMMARY\n"
+    prompt += f"Current Price: {current_price_formatted}\n"
+    prompt += f"Market Cap: {market_cap_formatted}\n"
+    prompt += f"Exchange: {exchange}\n"
+    prompt += f"Total Financial Statements Analyzed: {len(statements)}\n\n"
+    
+    # Add specific request for thorough analysis to maximize Claude's thinking
+    prompt += "## ANALYSIS REQUEST\n"
+    prompt += "Please analyze this company thoroughly using all the data provided above. Take your time to consider:\n\n"
+    prompt += "1. Intrinsic value calculation based on future cash flows, growth rates, and margin of safety\n"
+    prompt += "2. Quality of the business model and competitive advantages\n"
+    prompt += "3. Financial health and risk of financial distress\n"
+    prompt += "4. Management quality and capital allocation\n"
+    prompt += "5. Growth prospects and sustainability\n"
+    prompt += "6. Risks - both company-specific and macroeconomic\n"
+    prompt += "7. A clear BUY, SELL, or HOLD recommendation with detailed rationale\n\n"
+    prompt += "This is an in-depth value investing analysis. Use as much time as you need to analyze the full dataset."
     
     return prompt
 
-def extract_analysis_components(response_text):
-    """Extract components from AI model's response.
+def extract_analysis_components(response):
+    """Extract components from the AI analysis response.
     
     Args:
-        response_text (str): Text response from AI model.
+        response (str): Raw response text from the AI model
         
     Returns:
-        dict: Dictionary with parsed components.
+        dict: Dictionary of extracted components
     """
-    # Default structure for analysis components
     components = {
-        "ticker": None,
-        "name": None,
-        "summary": None,
-        "strengths": [],
-        "weaknesses": [],
-        "recommendation": "HOLD",  # Default to HOLD when no clear recommendation found
-        "rationale": None,
-        "price_targets": {"current": None, "intrinsic": None, "margin_of_safety": None},
-        "metrics": {},
-        "raw_response": response_text
+        'raw_response': response,
+        'recommendation': None,
+        'summary': None,
+        'strengths': [],
+        'weaknesses': [],
+        'price_targets': {},
+        'rationale': None,
+        'metrics': {},
+        'competitive_analysis': None,  # New field for enhanced analysis
+        'management_assessment': None, # New field for enhanced analysis
+        'financial_health': None,      # New field for enhanced analysis
+        'growth_prospects': None,      # New field for enhanced analysis
+        'risk_factors': None           # New field for enhanced analysis
     }
     
-    # Extract ticker and name using broader patterns to catch various formats
-    ticker_match = re.search(r'(?:^# |^#|^)([^(]+?)\s*\(([A-Z.]+)\)', response_text, re.MULTILINE)
-    if ticker_match:
-        components["name"] = ticker_match.group(1).strip()
-        components["ticker"] = ticker_match.group(2).strip()
+    # Extract recommendation (BUY, SELL, HOLD)
+    recommendation_match = re.search(r'(?:^## |^#|^)Recommendation:?\s*(.*?)$', response, re.MULTILINE | re.IGNORECASE)
+    if recommendation_match:
+        recommendation = recommendation_match.group(1).strip()
+        # Normalize to just BUY, SELL, or HOLD
+        if 'buy' in recommendation.lower():
+            components['recommendation'] = 'BUY'
+        elif 'sell' in recommendation.lower():
+            components['recommendation'] = 'SELL'
+        elif 'hold' in recommendation.lower():
+            components['recommendation'] = 'HOLD'
+        else:
+            components['recommendation'] = recommendation
     
-    # Try multiple patterns for extracting recommendation
-    recommendation_patterns = [
-        r'(?:^## |^#|^)Recommendation:?\s*(.*?)$',
-        r'(?:^## |^#|^)Signal:?\s*(.*?)$',
-        r'Recommendation:\s*(.*?)(?:\n|\.|$)',
-        r'Signal:\s*(.*?)(?:\n|\.|$)',
-        r'(?:^## |^#|^)Verdict:?\s*(.*?)$',
-        r'(?:^## |^#|^)Conclusion:?\s*(.*?)$'
-    ]
-    
-    for pattern in recommendation_patterns:
-        recommendation_match = re.search(pattern, response_text, re.MULTILINE | re.IGNORECASE)
-        if recommendation_match:
-            rec = recommendation_match.group(1).strip()
-            # If recommendation was found but empty, keep searching
-            if rec:
-                components["recommendation"] = rec
-                break
-    
-    # Infer recommendation from response text if still missing
-    if components["recommendation"] == "HOLD":
-        # Look for explicit recommendation terms throughout the text
-        if re.search(r'\b(?:strong buy|buy signal|undervalued|recommend buying|should buy)\b', response_text.lower()):
-            components["recommendation"] = "BUY"
-        elif re.search(r'\b(?:strong sell|sell signal|overvalued|recommend selling|should sell)\b', response_text.lower()):
-            components["recommendation"] = "SELL"
+    # Extract summary
+    summary_match = re.search(r'(?:^## |^#|^)Summary:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if summary_match:
+        components['summary'] = summary_match.group(1).strip()
     
     # Extract strengths
-    strengths_section = re.search(r'(?:^## |^)Strengths:?\s*(.*?)(?=(?:^## |^#|$))', response_text, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-    if strengths_section:
-        strengths_text = strengths_section.group(1).strip()
-        # Try list pattern first (numbered or bullet points)
-        strengths = re.findall(r'^[0-9.*-]+\s*(.*?)$', strengths_text, re.MULTILINE)
-        if strengths:
-            components["strengths"] = [s.strip() for s in strengths if s.strip()]
-        else:
-            # Try alternative format - split by lines
-            strengths = [s.strip() for s in strengths_text.split('\n') if s.strip()]
-            if strengths:
-                components["strengths"] = strengths
+    strengths_match = re.search(r'(?:^## |^#|^)Strengths:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if strengths_match:
+        strengths_text = strengths_match.group(1)
+        strengths = re.findall(r'^-\s*(.*?)$', strengths_text, re.MULTILINE)
+        components['strengths'] = [s.strip() for s in strengths if s.strip()]
     
     # Extract weaknesses
-    weaknesses_section = re.search(r'(?:^## |^)Weaknesses:?\s*(.*?)(?=(?:^## |^#|$))', response_text, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-    if weaknesses_section:
-        weaknesses_text = weaknesses_section.group(1).strip()
-        # Try list pattern first
-        weaknesses = re.findall(r'^[0-9.*-]+\s*(.*?)$', weaknesses_text, re.MULTILINE)
-        if weaknesses:
-            components["weaknesses"] = [w.strip() for w in weaknesses if w.strip()]
-        else:
-            # Try alternative format - split by lines
-            weaknesses = [w.strip() for w in weaknesses_text.split('\n') if w.strip()]
-            if weaknesses:
-                components["weaknesses"] = weaknesses
-    
-    # Extract rationale
-    rationale_section = re.search(r'(?:^## |^)Rationale:?\s*(.*?)(?=(?:^## |^#|$))', response_text, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-    if rationale_section:
-        components["rationale"] = rationale_section.group(1).strip()
-    else:
-        # Try alternative patterns like "Analysis" or "Value Assessment"
-        for alt_pattern in ["Analysis", "Value Assessment", "Investment Thesis"]:
-            alt_section = re.search(fr'(?:^## |^){alt_pattern}:?\s*(.*?)(?=(?:^## |^#|$))', 
-                                   response_text, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-            if alt_section:
-                components["rationale"] = alt_section.group(1).strip()
-                break
-    
-    # If no rationale found, extract a summary from the text
-    if not components["rationale"]:
-        # Find first substantive paragraph after any headers
-        summary_match = re.search(r'(?:^#.*?\n+)(.*?)(?=\n\n|\n#)', response_text, re.DOTALL)
-        if summary_match:
-            components["rationale"] = summary_match.group(1).strip()
+    weaknesses_match = re.search(r'(?:^## |^#|^)Weaknesses:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if weaknesses_match:
+        weaknesses_text = weaknesses_match.group(1)
+        weaknesses = re.findall(r'^-\s*(.*?)$', weaknesses_text, re.MULTILINE)
+        components['weaknesses'] = [w.strip() for w in weaknesses if w.strip()]
     
     # Extract price targets
-    price_match = re.search(r'(?:Current\s+Price|Current\s+price|Price):\s*\$?\s*([\d,.]+)', response_text, re.IGNORECASE)
-    if price_match:
-        components["price_targets"]["current"] = float(price_match.group(1).replace(',', ''))
+    price_analysis_match = re.search(r'(?:^## |^#|^)Price Analysis:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if price_analysis_match:
+        price_analysis = price_analysis_match.group(1).strip()
+        
+        # Extract current price
+        current_price_match = re.search(r'Current Price:.*?[$€£¥]([0-9.,]+)', price_analysis, re.IGNORECASE)
+        if current_price_match:
+            try:
+                # Handle potential commas in number format
+                price_str = current_price_match.group(1).replace(',', '')
+                components['price_targets']['current_price'] = float(price_str)
+            except (ValueError, IndexError):
+                pass
+        
+        # Extract intrinsic value
+        intrinsic_match = re.search(r'Intrinsic Value:.*?[$€£¥]([0-9.,]+)', price_analysis, re.IGNORECASE)
+        if intrinsic_match:
+            try:
+                value_str = intrinsic_match.group(1).replace(',', '')
+                components['price_targets']['intrinsic_value'] = float(value_str)
+            except (ValueError, IndexError):
+                pass
+        
+        # Extract margin of safety
+        safety_match = re.search(r'Margin of Safety:.*?([0-9.,]+)%', price_analysis, re.IGNORECASE)
+        if safety_match:
+            try:
+                safety_str = safety_match.group(1).replace(',', '')
+                components['price_targets']['margin_of_safety'] = float(safety_str)
+            except (ValueError, IndexError):
+                pass
+                
+        # Extract valuation method (new field from enhanced analysis)
+        valuation_method_match = re.search(r'Valuation Method\(s\):.*?([^\n]+)', price_analysis, re.IGNORECASE)
+        if valuation_method_match:
+            components['price_targets']['valuation_method'] = valuation_method_match.group(1).strip()
     
-    intrinsic_match = re.search(r'(?:Intrinsic\s+Value|Fair\s+Value|Target\s+Price):\s*\$?\s*([\d,.]+)', response_text, re.IGNORECASE)
-    if intrinsic_match:
-        components["price_targets"]["intrinsic"] = float(intrinsic_match.group(1).replace(',', ''))
+    # Extract investment rationale
+    rationale_match = re.search(r'(?:^## |^#|^)Investment Rationale:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if rationale_match:
+        components['rationale'] = rationale_match.group(1).strip()
     
-    margin_match = re.search(r'Margin\s+of\s+Safety:?\s*([+-]?\d+(?:\.\d+)?)\s*%', response_text, re.IGNORECASE)
-    if margin_match:
-        components["price_targets"]["margin_of_safety"] = float(margin_match.group(1))
+    # Extract new sections from enhanced analysis
     
-    # Extract financial metrics
-    pe_match = re.search(r'P/E(?:\s+Ratio)?:\s*([\d.]+)', response_text, re.IGNORECASE)
-    if pe_match:
-        components["metrics"]["pe_ratio"] = float(pe_match.group(1))
+    # Competitive Analysis
+    comp_analysis_match = re.search(r'(?:^## |^#|^)Competitive Analysis:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if comp_analysis_match:
+        components['competitive_analysis'] = comp_analysis_match.group(1).strip()
     
-    pb_match = re.search(r'P/B(?:\s+Ratio)?:\s*([\d.]+)', response_text, re.IGNORECASE)
-    if pb_match:
-        components["metrics"]["pb_ratio"] = float(pb_match.group(1))
+    # Management Assessment
+    mgmt_match = re.search(r'(?:^## |^#|^)Management Assessment:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if mgmt_match:
+        components['management_assessment'] = mgmt_match.group(1).strip()
     
-    dividend_match = re.search(r'Dividend\s+Yield:\s*([\d.]+)%', response_text, re.IGNORECASE)
-    if dividend_match:
-        components["metrics"]["dividend_yield"] = float(dividend_match.group(1))
+    # Financial Health
+    fin_health_match = re.search(r'(?:^## |^#|^)Financial Health:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if fin_health_match:
+        components['financial_health'] = fin_health_match.group(1).strip()
     
-    roe_match = re.search(r'ROE:\s*([\d.]+)%', response_text, re.IGNORECASE)
-    if roe_match:
-        components["metrics"]["roe"] = float(roe_match.group(1))
+    # Growth Prospects
+    growth_match = re.search(r'(?:^## |^#|^)Growth Prospects:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if growth_match:
+        components['growth_prospects'] = growth_match.group(1).strip()
     
-    # Extract summary (first paragraph or section of the response)
-    summary_match = re.search(r'^(?:#.*\n+)?(.*?)(?=\n\n|\n#)', response_text, re.DOTALL)
-    if summary_match:
-        components["summary"] = summary_match.group(1).strip()
-    
-    # If no strengths or weaknesses found, try to extract them from key sentences using keywords
-    if not components["strengths"]:
-        # Look for positive assessment statements
-        strength_mentions = re.findall(r'(?:strong|solid|impressive|excellent|positive|good|high)\s+(?:\w+\s+){0,3}(?:balance sheet|cash flow|growth|profitability|margin|revenue|management|position|advantage)', response_text, re.IGNORECASE)
-        if strength_mentions:
-            components["strengths"] = [s.strip() for s in strength_mentions[:5]]
-    
-    if not components["weaknesses"]:
-        # Look for negative assessment statements
-        weakness_mentions = re.findall(r'(?:weak|poor|low|concerning|negative|declining|high)\s+(?:\w+\s+){0,3}(?:debt|valuation|competition|risk|expense|cost|margin|growth|revenue|profit)', response_text, re.IGNORECASE)
-        if weakness_mentions:
-            components["weaknesses"] = [w.strip() for w in weakness_mentions[:5]]
+    # Risk Factors
+    risk_match = re.search(r'(?:^## |^#|^)Risk Factors:?\s*(.*?)(?=(?:^## |^#|$))', response, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    if risk_match:
+        components['risk_factors'] = risk_match.group(1).strip()
     
     return components 
