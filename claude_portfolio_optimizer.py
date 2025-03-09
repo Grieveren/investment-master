@@ -258,7 +258,7 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
     """
     try:
         # Get configuration values - use thinking_budget for max_tokens
-        thinking_budget = config["claude"].get("thinking_budget", 32000)
+        max_tokens = config["claude"].get("thinking_budget", 16000)
         temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
         
         # System prompt to clarify the task
@@ -278,36 +278,25 @@ Take your time to think through all aspects of the portfolio in detail:
 Use your maximum thinking capacity to provide the most thorough analysis possible."""
         
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
-        logger.info(f"Using maximum thinking budget: {thinking_budget} tokens")
-        logger.info(f"Using streaming mode for large thinking budget to avoid timeouts")
+        logger.info(f"Using maximum thinking budget: {max_tokens} tokens")
         logger.debug(f"Prompt length: {len(prompt)} characters")
         
         start_time = time.time()
         
-        # Use streaming for large thinking budget to prevent timeout
-        text_content = ""  # Initialize empty string to collect response
-        
-        with client.messages.stream(
+        message = client.messages.create(
             model=model,
-            max_tokens=40000,  # Increased to comfortably accommodate 32K thinking budget
-            temperature=1.0,  # Must be 1.0 when thinking is enabled
+            max_tokens=max_tokens,
             system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
-            thinking={"type": "enabled", "budget_tokens": thinking_budget}
-        ) as stream:
-            # Process each chunk in the stream
-            for chunk in stream:
-                if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text') and chunk.delta.text:
-                    text_content += chunk.delta.text
-                elif hasattr(chunk, 'message') and hasattr(chunk.message, 'content'):
-                    for content_block in chunk.message.content:
-                        if hasattr(content_block, 'text') and content_block.text:
-                            text_content += content_block.text
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature
+        )
         
         elapsed_time = time.time() - start_time
         logger.info(f"Claude portfolio optimization completed in {elapsed_time:.1f}s")
         
-        return text_content
+        return message.content[0].text
     except Exception as e:
         error_msg = f"Error getting portfolio optimization from Claude: {str(e)}"
         logger.error(error_msg)

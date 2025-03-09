@@ -14,7 +14,7 @@
     },
     "claude": {
         "model": "claude-3-7-sonnet-20250219",
-        "thinking_budget": 32000
+        "thinking_budget": 16000
     },
     "output": {
         "raw_data_file": "data/raw/api_data.json",
