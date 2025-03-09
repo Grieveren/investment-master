@@ -580,10 +580,12 @@ def build_analysis_prompt(company_data):
             description = statement.get('description', '')
             # Extract the price from ticker with price in parentheses - handles both $ and € symbols
             # E.g., "BRK.B ($495.62)" or "ALV (€343.2)"
-            price_match = re.search(r'[($€](\d+\.?\d*)[)]', description)
+            price_match = re.search(r'[\u20AC$€]([0-9.,]+)', description)
             if price_match:
                 try:
-                    current_price = float(price_match.group(1))
+                    # Handle European number format (replace comma with period)
+                    price_str = price_match.group(1).replace(',', '.')
+                    current_price = float(price_str)
                     # Found the most reliable price, no need to look further
                     break
                 except (ValueError, TypeError):
