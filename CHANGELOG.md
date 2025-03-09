@@ -267,4 +267,23 @@ Enhanced the portfolio analyzer to address the truncation issue in company analy
 - [ ] Create a comprehensive comparison tool to highlight differences between model analyses
 - [ ] Add version tracking to analyses to track changes over time
 - [ ] Implement automatic insights that summarize the key differences between models' recommendations
-- [ ] Consider adding a web interface for easier navigation of analysis files 
+- [ ] Consider adding a web interface for easier navigation of analysis files
+
+## [Unreleased]
+
+### Added
+- Claude holistic portfolio optimization with detailed rationales
+- New script `claude_portfolio_optimizer.py` to perform holistic analysis
+- Combined shell script `run_portfolio_analysis.sh` for complete workflow
+- Added configuration settings for Claude portfolio optimization
+- Enhanced documentation on the two portfolio optimization approaches
+
+### Changed
+- Updated README.md with information about the holistic portfolio optimization feature
+- Improved error handling and logging in optimization scripts
+- Enhanced directory structure management with automatic creation
+
+### Next Steps
+- Create a web interface for easier interaction with the portfolio analysis tools
+- Add visualization of portfolio changes before and after optimization
+- Implement version tracking to compare analyses over time 
