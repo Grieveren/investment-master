@@ -211,38 +211,10 @@ Portfolio summary:
     for ticker, designation in positions_with_analyses:
         prompt += f"### Analysis for {designation} ({ticker})\n\n"
         
-        # Add the full analysis, but use just the key sections to save space
+        # Include the complete analysis - no extraction of sections
         analysis = analyses.get(ticker, "No analysis available")
-        
-        # Extract just the key sections to save space
-        recommendation_match = re.search(r'(?:^## |^#|^)Recommendation:?\s*(.*?)$', analysis, re.MULTILINE | re.IGNORECASE)
-        recommendation = "N/A"
-        if recommendation_match:
-            recommendation = recommendation_match.group(1).strip()
-        
-        # Extract summary
-        summary_match = re.search(r'(?:^## |^#|^)Summary:?\s*(.*?)(?=(?:^## |^#|$))', analysis, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-        summary = "No summary available"
-        if summary_match:
-            summary = summary_match.group(1).strip()
-        
-        # Extract price analysis
-        price_analysis_match = re.search(r'(?:^## |^#|^)Price Analysis:?\s*(.*?)(?=(?:^## |^#|$))', analysis, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-        price_analysis = "No price analysis available"
-        if price_analysis_match:
-            price_analysis = price_analysis_match.group(1).strip()
-        
-        # Extract rationale
-        rationale_match = re.search(r'(?:^## |^#|^)Investment Rationale:?\s*(.*?)(?=(?:^## |^#|$))', analysis, re.MULTILINE | re.DOTALL | re.IGNORECASE)
-        rationale = "No investment rationale available"
-        if rationale_match:
-            rationale = rationale_match.group(1).strip()
-        
-        # Add to prompt
-        prompt += f"**Recommendation:** {recommendation}\n\n"
-        prompt += f"**Summary:** {summary}\n\n"
-        prompt += f"**Price Analysis:**\n{price_analysis}\n\n"
-        prompt += f"**Investment Rationale:**\n{rationale}\n\n"
+        prompt += analysis + "\n\n"
+        logger.info(f"Added complete analysis for {ticker} ({len(analysis)} characters)")
     
     # Add final optimization request
     prompt += """
@@ -266,6 +238,8 @@ Based on the above data, please provide:
 4. **Overall Optimization Strategy**: Explain the overall portfolio optimization strategy and how it aligns with value investing principles.
 
 Please be specific in your recommendations and provide detailed justifications for each proposed change. For example, don't just say "increase Microsoft position", but rather "increase Microsoft (MSFT) position by €X,XXX (approximately X%), because...".
+
+Use your maximum thinking budget to analyze all data thoroughly and provide the most comprehensive optimization possible.
 """
     
     return prompt
@@ -283,17 +257,28 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
         str: Text response from Claude or error message.
     """
     try:
-        # Get configuration values
-        max_tokens = config["portfolio"]["claude_optimization"].get("max_tokens", 4000)
+        # Get configuration values - use thinking_budget for max_tokens
+        max_tokens = config["claude"].get("thinking_budget", 16000)
         temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
         
         # System prompt to clarify the task
         system_prompt = """You are a financial advisor with expertise in value investing. 
 Your task is to provide comprehensive portfolio optimization recommendations based on 
 the detailed portfolio data and individual stock analyses provided. Focus on providing specific, 
-actionable advice with detailed rationales for each recommendation."""
+actionable advice with detailed rationales for each recommendation.
+
+Take your time to think through all aspects of the portfolio in detail:
+1. Consider the intrinsic value of each stock compared to its current price
+2. Analyze sector allocations and diversification
+3. Evaluate the risk profile of the overall portfolio
+4. Compare the growth prospects of each position
+5. Look for potential concentration risks
+6. Assess the alignment with value investing principles
+
+Use your maximum thinking capacity to provide the most thorough analysis possible."""
         
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
+        logger.info(f"Using maximum thinking budget: {max_tokens} tokens")
         logger.debug(f"Prompt length: {len(prompt)} characters")
         
         start_time = time.time()
@@ -335,6 +320,9 @@ def format_optimization_output(optimization_response, portfolio_data):
     # Add date information
     markdown += f"**Analysis Date:** {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
     
+    # Add note about enhanced analysis mode
+    markdown += "**Enhanced Analysis Mode:** This optimization was performed using the complete analysis data for each position with Claude's maximum thinking budget, allowing for more comprehensive and nuanced recommendations.\n\n"
+    
     # Add portfolio summary
     markdown += "## Portfolio Summary\n\n"
     
@@ -366,10 +354,7 @@ def format_optimization_output(optimization_response, portfolio_data):
     
     # Add disclaimer
     markdown += "\n\n---\n\n"
-    markdown += "**Disclaimer:** These recommendations are based on algorithmic analysis of financial data and "
-    markdown += "should not be considered financial advice. All investment decisions should be made based on "
-    markdown += "your own research and in consultation with a qualified financial advisor. Past performance is "
-    markdown += "not indicative of future results.\n"
+    markdown += "*Disclaimer: These recommendations are generated algorithmically based on financial analysis and value investing principles. They should be considered as one input among many for your investment decisions. Always do your own research and consider consulting with a financial advisor before making investment decisions.*"
     
     return markdown
 
@@ -434,6 +419,7 @@ def main():
         logger.info(f"Parsing portfolio data from CSV: {csv_path}")
         print(f"Parsing portfolio data from CSV: {csv_path}")
         portfolio_data = parse_portfolio_csv(csv_path)
+        
         if not portfolio_data:
             logger.error(f"Error parsing portfolio data from {csv_path}")
             print(f"Error parsing portfolio data from {csv_path}")
@@ -448,10 +434,12 @@ def main():
         prompt = create_claude_portfolio_prompt(portfolio_data, analyses)
         
         # Get optimization recommendations from Claude
-        logger.info("Requesting portfolio optimization from Claude...")
-        print("Requesting portfolio optimization from Claude...")
-        optimization_response = get_claude_portfolio_optimization(prompt, client, 
-                                                               model=config["claude"]["model"])
+        claude_model = config["claude"]["model"]
+        thinking_budget = config["claude"].get("thinking_budget", 16000)
+        logger.info(f"Requesting portfolio optimization from Claude ({claude_model}) with {thinking_budget} token thinking budget...")
+        print(f"Requesting portfolio optimization from Claude ({claude_model}) with {thinking_budget} token thinking budget...")
+        print("This may take longer than usual due to full analysis processing...")
+        optimization_response = get_claude_portfolio_optimization(prompt, client, model=claude_model)
         
         # Format and save the output
         logger.info("Formatting and saving optimization results...")

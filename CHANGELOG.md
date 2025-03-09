@@ -3,6 +3,20 @@
 ## 2025-03-09: Portfolio Analysis Run (Anthropic Claude)
 
 Ran portfolio analysis on 11 stocks using Anthropic Claude model.
+- Date: 2025-03-09 19:48:05
+- Duration: 472.2 seconds
+- Output: data/processed/portfolio_analysis_claude.md
+- Company analyses: data/processed/companies/claude/
+
+### Files Changed
+- `data/processed/portfolio_analysis_claude.md`
+- `data/processed/companies/claude/*.md`
+
+
+
+## 2025-03-09: Portfolio Analysis Run (Anthropic Claude)
+
+Ran portfolio analysis on 11 stocks using Anthropic Claude model.
 - Date: 2025-03-09 17:21:52
 - Duration: 459.0 seconds
 - Output: data/processed/portfolio_analysis_claude.md
@@ -286,4 +300,26 @@ Enhanced the portfolio analyzer to address the truncation issue in company analy
 ### Next Steps
 - Create a web interface for easier interaction with the portfolio analysis tools
 - Add visualization of portfolio changes before and after optimization
-- Implement version tracking to compare analyses over time 
+- Implement version tracking to compare analyses over time
+
+## 2025-03-09: Enhanced Claude Portfolio Optimization
+
+Significantly improved the Claude holistic portfolio optimization feature to maximize analysis quality and depth:
+
+### Enhancements
+- Modified claude_portfolio_optimizer.py to send complete analysis files instead of extracting sections
+- Increased Claude's thinking budget from 4,000 to 16,000 tokens for deeper analysis
+- Enhanced system prompt to guide Claude through more thorough portfolio evaluation
+- Added comprehensive details in output markdown about the enhanced analysis mode
+- Improved logging to show token budget and analysis file sizes
+
+### Files Changed
+- `claude_portfolio_optimizer.py`
+- `test_claude_connection.py`
+- `config.json`
+- `CHANGELOG.md`
+
+### Impact
+- More sophisticated optimization recommendations with detailed rationales
+- Better utilization of individual stock analyses for portfolio-level decisions
+- Significantly more detailed output with sector analysis and implementation considerations 

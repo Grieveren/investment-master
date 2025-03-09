@@ -66,9 +66,25 @@ def test_prompt_creation():
     
     # Print prompt length and preview
     print(f"Prompt length: {len(prompt)} characters")
+    print(f"Using FULL company analyses (not just extracts)")
+    print(f"Using Claude thinking budget: {config['claude'].get('thinking_budget', 16000)} tokens")
+    
+    # Count total words in the prompt as a rough estimate of tokens
+    word_count = len(prompt.split())
+    print(f"Estimated word count: {word_count} (roughly {word_count * 0.75:.0f} tokens)")
+    
     print("\nPrompt preview (first 500 characters):")
     print(prompt[:500])
     print("...")
+    
+    # Print each ticker in the prompt
+    tickers_found = []
+    for ticker in analyses.keys():
+        if ticker in prompt:
+            tickers_found.append(ticker)
+    
+    print(f"\nFound analyses for {len(tickers_found)} tickers in prompt: {', '.join(tickers_found)}")
+    
     print("\nPrompt end (last 500 characters):")
     print(prompt[-500:])
     
