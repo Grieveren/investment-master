@@ -302,6 +302,27 @@ Enhanced the portfolio analyzer to address the truncation issue in company analy
 - Add visualization of portfolio changes before and after optimization
 - Implement version tracking to compare analyses over time
 
+## 2025-03-09: Increased Claude Thinking Budget to 32K
+
+Enhanced the depth of both individual stock analysis and portfolio optimization:
+
+### Enhancements
+- Doubled Claude's thinking budget from 16K to 32K tokens
+- Increased max_tokens to 40K to accommodate larger thinking capacity
+- Updated temperature settings to maintain compatibility with thinking mode
+- Applied the increased budget to both individual analysis and portfolio optimization
+
+### Files Changed
+- `config.json`
+- `utils/analysis.py`
+- `claude_portfolio_optimizer.py`
+
+### Impact
+- Deeper financial analysis with more comprehensive valuation methods
+- More thorough competitive analysis and industry context
+- Enhanced risk assessment and more detailed investment rationales
+- More sophisticated portfolio-level optimization recommendations
+
 ## 2025-03-09: Enhanced Claude Individual Stock Analysis
 
 Significantly improved the Claude individual stock analysis capabilities to maximize quality and depth:

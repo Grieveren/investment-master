@@ -68,280 +68,93 @@ def create_anthropic_client(api_key=None):
         logger.error(f"Error creating Anthropic client: {e}")
         return None
 
-def get_value_investing_signals(portfolio_data, api_data, openai_client=None, anthropic_client=None, model="o3-mini"):
-    """Use AI models to analyze stocks and provide buy/sell signals.
-    
-    This function processes each stock individually and combines the results,
-    ensuring every stock gets fully analyzed without context window limitations.
-    
-    Args:
-        portfolio_data (list): List of stock dictionaries with name, shares, price, etc.
-        api_data (dict): Dictionary of API responses from SimplyWall.st
-        openai_client (OpenAI, optional): OpenAI client for o3-mini model.
-        anthropic_client (Anthropic, optional): Anthropic client for Claude model.
-        model (str): Model to use - either "o3-mini" or "claude-3-7"
-        
-    Returns:
-        dict: Dictionary containing the markdown analysis and structured stock results
-    """
-    model_short_name = "openai" if model == "o3-mini" else "claude"
+def get_value_investing_signals(portfolio_data, api_data, openai_client, anthropic_client, model="o3-mini"):
+    """Analyze stocks using value investing principles."""
     logger.info(f"Starting value investing analysis using {model} model")
     
-    if model.startswith("claude"):
-        thinking_budget = config["claude"].get("thinking_budget", 16000)
+    # Determine if we're using Claude for enhanced analysis
+    using_claude = model.startswith("claude")
+    thinking_budget = config["claude"].get("thinking_budget", 16000) if using_claude else 0
+    
+    if using_claude:
         logger.info(f"Using Claude with enhanced analysis mode and {thinking_budget} token thinking budget")
         print(f"Enhanced Analysis Mode: Using Claude with {thinking_budget} token thinking budget")
-        print("This will provide more comprehensive and nuanced analysis, but may take longer per company")
+        print(f"This will provide more comprehensive and nuanced analysis, but may take longer per company")
     
+    # Prepare results
     stock_analyses = []
-    analysis_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    analysis_date = datetime.date.today().isoformat()
     
-    # Create output directory for individual company analyses
-    model_companies_dir = os.path.join(config["output"]["companies_dir"], model_short_name)
-    os.makedirs(model_companies_dir, exist_ok=True)
-    
+    # Process each stock in the portfolio
     for stock in portfolio_data:
-        ticker = None
         try:
-            name = stock.get('name', 'Unknown')
-            ticker_info = get_stock_ticker_and_exchange(name)
+            name = stock.get('name')
+            ticker = None
             
-            if not ticker_info:
-                logger.warning(f"No ticker info found for {name}")
+            # Try to find the ticker from the name
+            for api_ticker, api_stock_data in api_data.items():
+                api_name = api_stock_data.get('name', '')
+                if not api_name and isinstance(api_stock_data, dict) and 'data' in api_stock_data:
+                    # Try to get name from nested data structure
+                    if 'companyByExchangeAndTickerSymbol' in api_stock_data['data']:
+                        api_name = api_stock_data['data']['companyByExchangeAndTickerSymbol'].get('name', '')
+                
+                # Check if this is the stock we're looking for
+                if name and api_name and name.lower() in api_name.lower() or api_ticker.lower() in name.lower():
+                    ticker = api_ticker
+                    break
+            
+            if not ticker:
+                logger.warning(f"Could not find ticker for {name}")
                 continue
             
-            ticker = ticker_info.get('ticker')
-            exchange = ticker_info.get('exchange')
-            
-            # Get API data for this company - try different possible keys
-            company_data = None
-            
-            # Try by ticker first
-            if ticker in api_data:
-                company_data = api_data[ticker]
                 logger.info(f"Found API data for ticker {ticker}")
-            # Then try by name
-            elif name in api_data:
-                company_data = api_data[name]
-                logger.info(f"Found API data for company name {name}")
-            # Try similar name variations
-            else:
-                for key in api_data.keys():
-                    if name.lower() in key.lower() or ticker.lower() in key.lower():
-                        company_data = api_data[key]
-                        logger.info(f"Found API data for similar key: {key}")
-                        break
             
+            # Get company data
+            company_data = api_data.get(ticker)
             if not company_data:
-                logger.warning(f"No API data found for {name} ({ticker})")
+                logger.warning(f"No API data found for {ticker}")
                 continue
             
-            # Add ticker and name to company data for reference if not already present
-            if 'ticker' not in company_data:
-                company_data['ticker'] = ticker
-            if 'name' not in company_data:
-                company_data['name'] = name
-            
-            print(f"Analyzing {name} ({ticker})...")
-            
-            # Create the user prompt with all available financial data
-            logger.info(f"Building comprehensive analysis prompt for {ticker}")
-            user_prompt = build_analysis_prompt(company_data)
-            
-            # Show prompt size to monitor token usage
-            prompt_size = len(user_prompt)
-            logger.info(f"Analysis prompt for {ticker} created: {prompt_size} characters")
-            
+            # Start timing
             start_time = time.time()
             
-            if model.startswith("claude"):
-                # Use Claude with enhanced analysis
-                logger.info(f"Starting enhanced Claude analysis for {ticker}")
-                print(f"  - Using enhanced analysis with full data and extended thinking time")
-                response = analyze_with_claude(user_prompt, anthropic_client, model=config["claude"]["model"])
-            else:
-                # Use OpenAI for analysis
-                logger.info(f"Starting OpenAI analysis for {ticker}")
-                system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
-
-You will produce a detailed value investing analysis report with the following structure:
-
-# [Company Name] ([Ticker])
-
-## Recommendation
-[Clearly state BUY, SELL, or HOLD here - this must be one of these three words]
-
-## Summary
-[One paragraph summary of the company and your analysis]
-
-## Strengths
-- [Strength 1]
-- [Strength 2]
-- [Additional strengths...]
-
-## Weaknesses
-- [Weakness 1]
-- [Weakness 2]
-- [Additional weaknesses...]
-
-## Price Analysis
-Current Price: $[current price]
-Intrinsic Value: $[your estimated fair value]
-Margin of Safety: [percentage]%
-
-## Investment Rationale
-[Detailed explanation of your recommendation, focusing on value investing principles]
-
-Follow this format exactly as it will be parsed programmatically. Your analysis should be based on the financial statements and data provided, evaluating whether the stock is undervalued, fairly valued, or overvalued according to value investing principles.
-"""
-                response = analyze_with_openai(system_prompt, user_prompt, openai_client, model=config["openai"]["model"])
+            # Create a stock object with the necessary fields
+            stock_obj = {
+                'ticker': ticker,
+                'name': name,
+                'data': company_data
+            }
             
+            # Analyze the stock
+            print(f"Analyzing {name} ({ticker})...")
+            analysis_result = analyze_stock(stock_obj, model=model, openai_client=openai_client, anthropic_client=anthropic_client)
+            
+            # Calculate elapsed time
             elapsed_time = time.time() - start_time
             
-            # Extract the components from the response
-            components = extract_analysis_components(response)
-            
-            # Add to results
+            # Extract recommendation from analysis
+            if isinstance(analysis_result, dict):
+                recommendation = analysis_result.get('recommendation', 'N/A')
+                summary = analysis_result.get('summary')
+                strengths = analysis_result.get('strengths', [])
+                weaknesses = analysis_result.get('weaknesses', [])
+                
+                # Add to stock analyses
             stock_analyses.append({
-                'name': company_data['name'],
                 'ticker': ticker,
-                'recommendation': components.get('recommendation', 'N/A'),
-                'summary': components.get('summary', ''),
-                'strengths': components.get('strengths', []),
-                'weaknesses': components.get('weaknesses', []),
-                'rationale': components.get('rationale', ''),
-                'price_targets': components.get('price_targets', {}),
-                'metrics': components.get('metrics', {}),
-                'raw_response': components.get('raw_response', response)
-            })
-            
-            # Create an individual markdown file for the detailed company analysis
-            company_filename = f"{ticker.replace('.', '_')}.md"
-            company_filepath = os.path.join(model_companies_dir, company_filename)
-            
-            # Create an individual markdown file for the detailed company analysis
-            company_markdown = f"# {company_data['name']} ({ticker}) Analysis\n\n"
-            company_markdown += f"**Analysis Date:** {analysis_date}\n\n"
-            
-            # Always display recommendation 
-            recommendation = components.get('recommendation', 'HOLD')
-            if recommendation is None or recommendation.strip() == '':
-                recommendation = 'HOLD'
-            company_markdown += f"**Recommendation:** {recommendation}\n\n"
-            
-            # Add summary if available
-            summary = components.get('summary', '')
-            if summary:
-                company_markdown += "## Summary\n\n"
-                company_markdown += f"{summary}\n\n"
-            
-            # Add price targets if available
-            price_targets = components.get('price_targets', {})
-            if price_targets:
-                company_markdown += "## Price Analysis\n\n"
-                
-                # Current price
-                current_price = price_targets.get('current_price')
-                if current_price is not None:
-                    company_markdown += f"**Current Price:** ${current_price:.2f}\n\n"
-                
-                # Intrinsic value
-                intrinsic_value = price_targets.get('intrinsic_value')
-                if intrinsic_value is not None:
-                    company_markdown += f"**Intrinsic Value:** ${intrinsic_value:.2f}\n\n"
-                
-                # Margin of safety
-                margin_of_safety = price_targets.get('margin_of_safety')
-                if margin_of_safety is not None:
-                    company_markdown += f"**Margin of Safety:** {margin_of_safety:.1f}%\n\n"
-                
-                # Valuation method (new field from enhanced analysis)
-                valuation_method = price_targets.get('valuation_method')
-                if valuation_method:
-                    company_markdown += f"**Valuation Method(s):** {valuation_method}\n\n"
-            
-            # Add strengths if available
-            strengths = components.get('strengths', [])
-            if strengths:
-                company_markdown += "## Strengths\n\n"
-                for strength in strengths:
-                    company_markdown += f"- {strength}\n"
-                company_markdown += "\n"
-            
-            # Add weaknesses if available
-            weaknesses = components.get('weaknesses', [])
-            if weaknesses:
-                company_markdown += "## Weaknesses\n\n"
-                for weakness in weaknesses:
-                    company_markdown += f"- {weakness}\n"
-                company_markdown += "\n"
-            
-            # Add competitive analysis if available (new section from enhanced analysis)
-            competitive_analysis = components.get('competitive_analysis', '')
-            if competitive_analysis:
-                company_markdown += "## Competitive Analysis\n\n"
-                company_markdown += f"{competitive_analysis}\n\n"
-            
-            # Add management assessment if available (new section from enhanced analysis)
-            management_assessment = components.get('management_assessment', '')
-            if management_assessment:
-                company_markdown += "## Management Assessment\n\n"
-                company_markdown += f"{management_assessment}\n\n"
-            
-            # Add financial health if available (new section from enhanced analysis)
-            financial_health = components.get('financial_health', '')
-            if financial_health:
-                company_markdown += "## Financial Health\n\n"
-                company_markdown += f"{financial_health}\n\n"
-            
-            # Add growth prospects if available (new section from enhanced analysis)
-            growth_prospects = components.get('growth_prospects', '')
-            if growth_prospects:
-                company_markdown += "## Growth Prospects\n\n"
-                company_markdown += f"{growth_prospects}\n\n"
-            
-            # Add investment rationale if available
-            rationale = components.get('rationale', '')
-            if rationale:
-                company_markdown += "## Investment Rationale\n\n"
-                company_markdown += f"{rationale}\n\n"
-            
-            # Add risk factors if available (new section from enhanced analysis)
-            risk_factors = components.get('risk_factors', '')
-            if risk_factors:
-                company_markdown += "## Risk Factors\n\n"
-                company_markdown += f"{risk_factors}\n\n"
-            
-            # Add full AI response as a reference
-            company_markdown += "## Full Analysis\n\n"
-            company_markdown += "```\n"
-            company_markdown += components.get('raw_response', '')[:5000]  # Limit to first 5000 chars if too long
-            if len(components.get('raw_response', '')) > 5000:
-                company_markdown += "\n... (truncated) ..."
-            company_markdown += "\n```\n\n"
-            
-            # Add footer with model information
-            company_markdown += "---\n\n"
-            if model.startswith("claude"):
-                thinking_budget = config["claude"].get("thinking_budget", 16000)
-                company_markdown += f"This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with {thinking_budget} tokens of thinking budget. "
-                company_markdown += "The enhanced analysis includes comprehensive evaluation of all available financial data. "
+                    'name': name,
+                    'recommendation': recommendation,
+                    'summary': summary,
+                    'strengths': strengths,
+                    'weaknesses': weaknesses,
+                    'analysis_path': analysis_result.get('analysis_path')
+                })
             else:
-                company_markdown += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's o3-mini model. "
-            company_markdown += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
-            company_markdown += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
-            
-            # Save the individual company file
-            save_markdown(company_markdown, company_filepath)
-            
-            # Handle None values safely in format strings
-            company_name = company_data.get('name', 'Unknown')
-            recommendation = components.get('recommendation', 'N/A')
-            if recommendation is None:
                 recommendation = 'N/A'
                 
-            print(f"{company_name:<30} | {'✅ Complete':<20} | {recommendation:<10}")
-            logger.info(f"Analyzed {company_name} ({ticker}) in {elapsed_time:.1f}s: {recommendation}")
+            print(f"{name:<30} | {'✅ Complete':<20} | {recommendation:<10}")
+            logger.info(f"Analyzed {name} ({ticker}) in {elapsed_time:.1f}s: {recommendation}")
             
         except Exception as e:
             logger.error(f"Error analyzing {stock.get('ticker', 'unknown')}: {e}")
@@ -364,9 +177,9 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
         
         # Truncate and format summary
         summary = result.get('summary', 'No summary provided')
-        if len(summary) > 200:
+        if summary is not None and len(summary) > 200:
             summary = summary[:197] + "..."
-        summary = summary.replace('\n', ' ').replace('|', '/').strip()
+        summary = summary.replace('\n', ' ').replace('|', '/').strip() if summary else 'No summary provided'
         
         # Get top 2 strengths
         strengths = result.get('strengths', [])
@@ -378,25 +191,14 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
         # Create link to detailed analysis
         ticker = result.get('ticker', 'unknown')
         model_short_name = "openai" if model == "o3-mini" else "claude"
-        ticker_filename = ticker.replace('.', '_')
-        detail_link = f"[View Details](companies/{model_short_name}/{ticker_filename}.md)"
+        analysis_link = f"[Full Analysis](companies/{model_short_name}/{ticker}.md)"
         
-        markdown += f"| {name_with_ticker} | {recommendation} | {summary} | {strengths_text} | {detail_link} |\n"
+        # Add row to table
+        markdown += f"| {name_with_ticker} | {recommendation} | {summary} | {strengths_text} | {analysis_link} |\n"
     
-    markdown += "\n## Analysis Summary\n\n"
-    if model.startswith("claude"):
-        markdown += "This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with extended thinking. "
-    else:
-        markdown += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's o3-mini model. "
-    markdown += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
-    markdown += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
-    
-    # Combine the results into a final analysis
-    final_markdown = format_analysis_to_markdown(stock_analyses)
-    
-    # Return both the markdown and the structured data for portfolio optimization
+    # Return the results
     return {
-        "markdown": final_markdown,
+        "markdown": markdown,
         "stocks": stock_analyses
     }
 
@@ -429,106 +231,137 @@ def analyze_with_openai(system_prompt, user_prompt, client, model="o3-mini"):
         logger.error(f"Error calling OpenAI API: {e}")
         return f"Error: {e}"
 
-def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219"):
-    """Use Anthropic's Claude model to analyze financial data.
+def analyze_with_claude(client, stock_data, ticker, company_name, model_name, thinking_budget):
+    """Perform a detailed analysis of a stock using Claude model."""
+    logger.info(f"Starting enhanced Claude analysis for {ticker}")
+    logger.info(f"  - Using enhanced analysis with full data and extended thinking time")
     
-    Args:
-        user_prompt (str): The prompt to send to Claude.
-        client (Anthropic): Anthropic client instance.
-        model (str, optional): Claude model to use. Defaults to "claude-3-7-sonnet-20250219".
-        
-    Returns:
-        str: Text response from Claude.
-    """
-    try:
-        thinking_budget = config["claude"].get("thinking_budget", 16000)
-        
-        # Enhanced system prompt with detailed guidance for using extended thinking time
-        system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+    prompt = create_enhanced_analysis_prompt(stock_data, ticker, company_name)
+    logger.info(f"Analysis prompt for {ticker} created: {len(prompt)} characters")
+    
+    # Create system prompt for Claude
+    system_prompt = """You are a value investing expert analyzing a stock. Provide a thorough financial analysis that includes:
 
-You have been given extended thinking time to perform an exceptionally thorough analysis of a company. Use this time to:
+1. Recommendation: Give a clear BUY, SELL, or HOLD recommendation based on intrinsic value vs. current price.
+2. Summary: Provide a brief one-paragraph overview of the company and your recommendation.
+3. Strengths: List 3-5 key strengths or competitive advantages.
+4. Weaknesses: List 3-5 key weaknesses or challenges.
+5. Competitive Analysis: Evaluate the company's position relative to competitors.
+6. Management Assessment: Evaluate the management team's performance, vision, and shareholder focus.
+7. Financial Health: Analyze key financial metrics including debt, cash flow, and profitability.
+8. Growth Prospects: Evaluate growth opportunities in existing and new markets.
+9. Price Analysis: Calculate intrinsic value using DCF, P/E, and P/B. Compare to current price.
+10. Investment Rationale: Explain with at least 3 reasons why this is a good or bad investment.
+11. Risk Factors: List 3-5 key risks.
 
-1. Carefully examine all financial statements and metrics provided
-2. Calculate intrinsic value using multiple approaches (DCF, multiples, etc.)
-3. Assess competitive advantages and durability of the business model
-4. Evaluate management quality and capital allocation decisions
-5. Consider industry dynamics, competitive threats, and macroeconomic factors
-6. Identify potential catalysts and risks not explicitly mentioned in the data
-7. Calculate a reasonable margin of safety based on risk factors
+Use value investing principles with a focus on:
+- Margin of safety between price and value
+- Financial strength and competitive advantages
+- Management quality and shareholder orientation
+- Long-term growth prospects
 
-You will produce a detailed value investing analysis report with the following structure:
-
-# [Company Name] ([Ticker])
-
-## Recommendation
-[Clearly state BUY, SELL, or HOLD here - this must be one of these three words]
-
-## Summary
-[One paragraph summary of the company and your analysis]
-
-## Strengths
-- [Strength 1]
-- [Strength 2]
-- [Additional strengths...]
-
-## Weaknesses
-- [Weakness 1]
-- [Weakness 2]
-- [Additional weaknesses...]
-
-## Competitive Analysis
-[One paragraph assessment of the company's competitive position and moat]
-
-## Management Assessment
-[One paragraph evaluation of management quality and capital allocation]
-
-## Financial Health
-[Analysis of balance sheet, cash flow, and financial stability]
-
-## Growth Prospects
-[Analysis of growth drivers, market opportunities, and threats]
-
-## Price Analysis
-Current Price: $[current price - ALWAYS include this exactly as provided in the data]
-Intrinsic Value: $[your estimated fair value]
-Margin of Safety: [percentage]%
-Valuation Method(s): [Brief description of valuation method(s) used]
-
-## Investment Rationale
-[Detailed explanation of your recommendation, focusing on value investing principles]
-
-## Risk Factors
-[List and analysis of key risks that could impact the investment thesis]
-
-IMPORTANT: Always include the Current Price in your Price Analysis section, exactly as provided in the data. If no price is available, clearly state "Price data not available". The current price is a critical data point for any investment analysis.
-
-This format will be used to guide investment decisions, so be thorough and objective. This is an enhanced analysis using comprehensive data, so provide detailed insights beyond a typical stock report.
+Format your response as Markdown with clear sections for each of the above elements.
 """
+    
+    # Log the request
+    logger.info(f"Requesting detailed company analysis from Claude ({model_name}) with {thinking_budget} token thinking budget...")
+    
+    max_tokens = 40000  # Set a high max token to accommodate thinking budget
+    
+    # Log whether we're using streaming
+    if thinking_budget > 2000:
+        logger.info("Using streaming mode for large thinking budget to avoid timeouts")
         
-        logger.info(f"Requesting detailed company analysis from Claude ({model}) with {thinking_budget} token thinking budget...")
+    try:
+        start_time = time.time()
         
-        response = client.messages.create(
-            model=model,
-            max_tokens=20000,  # Increased to be greater than thinking budget
+        # Use streaming for large thinking budget to prevent timeout
+        text_content = ""  # Initialize empty string to collect response
+        
+        with client.messages.stream(
+            model=model_name,
+            max_tokens=max_tokens,
+            temperature=1.0,  # Must be 1.0 when thinking is enabled
             system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ],
-            thinking={"type": "enabled", "budget_tokens": thinking_budget},
-            temperature=1.0  # Must be 1.0 when thinking is enabled
-        )
+            messages=[{"role": "user", "content": prompt}],
+            thinking={"type": "enabled", "budget_tokens": thinking_budget}
+        ) as stream:
+            # Process each chunk in the stream
+            for chunk in stream:
+                if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text') and chunk.delta.text:
+                    text_content += chunk.delta.text
+                elif hasattr(chunk, 'message') and hasattr(chunk.message, 'content'):
+                    for content_block in chunk.message.content:
+                        if hasattr(content_block, 'text') and content_block.text:
+                            text_content += content_block.text
         
-        # Extract and return the text response
-        text_content = ""
-        for block in response.content:
-            if hasattr(block, 'text'):
-                text_content += block.text
+        # Log the completion time
+        elapsed_time = time.time() - start_time
+        logger.info(f"Claude analysis completed in {elapsed_time:.1f}s")
         
-        return text_content
+        # Extract key information from the response
+        recommendation_match = re.search(r'(?:^## |^#|^)Recommendation:?\s*(.*?)$', text_content, re.MULTILINE | re.IGNORECASE)
+        summary_match = re.search(r'(?:^## |^#|^)Summary:?\s*(.*?)(?=(?:^## |^#|$))', text_content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        strengths_section = re.search(r'(?:^## |^#|^)Strengths:?\s*(.*?)(?=(?:^## |^#|$))', text_content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        weaknesses_section = re.search(r'(?:^## |^#|^)Weaknesses:?\s*(.*?)(?=(?:^## |^#|$))', text_content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        
+        # Extract and format data
+        recommendation = recommendation_match.group(1).strip() if recommendation_match else 'N/A'
+        summary = summary_match.group(1).strip() if summary_match else None
+        
+        # Extract strengths
+        strengths = []
+        if strengths_section:
+            strengths_text = strengths_section.group(1)
+            # Extract list items (- item or * item or 1. item format)
+            strengths_items = re.findall(r'(?:^-|\*|\d+\.)\s*(.*?)$', strengths_text, re.MULTILINE)
+            strengths = [item.strip() for item in strengths_items if item.strip()]
+        
+        # Extract weaknesses
+        weaknesses = []
+        if weaknesses_section:
+            weaknesses_text = weaknesses_section.group(1)
+            # Extract list items (- item or * item or 1. item format)
+            weaknesses_items = re.findall(r'(?:^-|\*|\d+\.)\s*(.*?)$', weaknesses_text, re.MULTILINE)
+            weaknesses = [item.strip() for item in weaknesses_items if item.strip()]
+        
+        # Create markdown file with the analysis
+        markdown_content = f"# {company_name} ({ticker}) Analysis\n\n"
+        markdown_content += f"**Analysis Date:** {datetime.date.today().isoformat()}\n\n"
+        markdown_content += f"**Recommendation:** {recommendation}\n\n"
+        markdown_content += "## Full Analysis\n\n"
+        markdown_content += text_content
+        
+        # Add disclaimer and save
+        markdown_content += "\n\n---\n\n"
+        markdown_content += "This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model "
+        markdown_content += f"with {thinking_budget} tokens of thinking budget. The enhanced analysis includes comprehensive evaluation of all available financial data. "
+        markdown_content += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
+        markdown_content += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
+        
+        # Ensure the directory exists
+        os.makedirs('data/processed/companies/claude', exist_ok=True)
+        
+        # Save the markdown file
+        file_path = f'data/processed/companies/claude/{ticker}.md'
+        with open(file_path, 'w') as f:
+            f.write(markdown_content)
+        
+        logger.info(f"Markdown saved to {file_path}")
+        
+        return {
+            'ticker': ticker,
+            'name': company_name,
+            'recommendation': recommendation,
+            'summary': summary,
+            'strengths': strengths,
+            'weaknesses': weaknesses,
+            'analysis_path': file_path
+        }
         
     except Exception as e:
-        logger.error(f"Error calling Claude API: {e}")
-        return f"Error: {e}"
+        logger.error(f"Error with Claude analysis for {ticker}: {str(e)}")
+        return None
 
 def format_analysis_to_markdown(stock_analyses):
     """Format stock analyses into markdown.
@@ -557,9 +390,9 @@ def format_analysis_to_markdown(stock_analyses):
         
         # Truncate and format summary
         summary = analysis.get('summary', 'No summary provided')
-        if len(summary) > 200:
+        if summary is not None and len(summary) > 200:
             summary = summary[:197] + "..."
-        summary = summary.replace('\n', ' ').replace('|', '/').strip()
+        summary = summary.replace('\n', ' ').replace('|', '/').strip() if summary else 'No summary provided'
         
         # Get top strengths and weaknesses
         strengths = analysis.get('strengths', [])
@@ -862,7 +695,7 @@ def extract_analysis_components(response):
             components['recommendation'] = 'SELL'
         elif 'hold' in recommendation.lower():
             components['recommendation'] = 'HOLD'
-        else:
+    else:
             components['recommendation'] = recommendation
     
     # Extract summary
@@ -955,3 +788,179 @@ def extract_analysis_components(response):
         components['risk_factors'] = risk_match.group(1).strip()
     
     return components 
+
+def create_enhanced_analysis_prompt(stock_data, ticker, company_name):
+    """Create a detailed prompt for Claude with all available financial data."""
+    # Financial data and metadata
+    financial_metrics = stock_data.get('financial_metrics', {})
+    financial_statements = stock_data.get('financial_statements', {})
+    
+    # Get current price if available
+    current_price = stock_data.get('current_price', 'Not available')
+    currency = stock_data.get('currency', 'USD')
+    
+    # Create the prompt
+    prompt = f"""# Financial Analysis Request for {company_name} ({ticker})
+
+## Company Information
+- Company: {company_name}
+- Ticker: {ticker}
+- Current Price: {current_price} {currency}
+- Industry: {stock_data.get('industry', 'Not available')}
+- Sector: {stock_data.get('sector', 'Not available')}
+
+## Key Financial Metrics
+"""
+
+    # Add financial metrics
+    if financial_metrics:
+        for category, metrics in financial_metrics.items():
+            prompt += f"\n### {category}\n"
+            for metric_name, value in metrics.items():
+                prompt += f"- {metric_name}: {value}\n"
+    
+    # Add financial statements if available
+    if financial_statements:
+        prompt += "\n## Financial Statements\n"
+        for statement_type, data in financial_statements.items():
+            prompt += f"\n### {statement_type}\n"
+            if isinstance(data, dict):
+                for year, values in data.items():
+                    prompt += f"\n#### {year}\n"
+                    for item, value in values.items():
+                        prompt += f"- {item}: {value}\n"
+            else:
+                prompt += "Data not available in expected format\n"
+    
+    # Add business description if available
+    if 'business_description' in stock_data:
+        prompt += f"\n## Business Description\n{stock_data.get('business_description')}\n"
+    
+    # Add news if available
+    if 'news' in stock_data and stock_data['news']:
+        prompt += "\n## Recent News\n"
+        for news_item in stock_data['news']:
+            prompt += f"- {news_item.get('date', 'No date')}: {news_item.get('headline', 'No headline')}\n"
+    
+    # End with analysis request
+    prompt += """
+## Analysis Request
+
+Using the provided financial data, please conduct a detailed value investing analysis for this company. 
+
+Your analysis should focus on:
+1. Intrinsic value estimation vs current market price
+2. Financial health assessment
+3. Competitive advantages and business model durability
+4. Management quality and capital allocation
+5. Growth prospects and market position
+6. Key risks and potential catalysts
+
+Based on your analysis, provide a clear BUY, SELL, or HOLD recommendation with detailed rationale.
+"""
+    
+    return prompt
+
+def analyze_stock(stock, model, openai_client=None, anthropic_client=None):
+    """Analyze a single stock using the specified model."""
+    ticker = stock['ticker']
+    name = stock['name']
+    company_data = stock['data']
+    
+    # Build the analysis prompt
+    logger.info(f"Building comprehensive analysis prompt for {ticker}")
+    prompt = create_enhanced_analysis_prompt(company_data, ticker, name)
+    
+    # Show prompt size to monitor token usage
+    prompt_size = len(prompt)
+    logger.info(f"Analysis prompt for {ticker} created: {prompt_size} characters")
+    
+    # Determine which model to use
+    if model.startswith("claude"):
+        # Use Claude with enhanced analysis
+        thinking_budget = config["claude"].get("thinking_budget", 16000)
+        logger.info(f"Starting enhanced Claude analysis for {ticker}")
+        print(f"  - Using enhanced analysis with full data and extended thinking time")
+        return analyze_with_claude(anthropic_client, company_data, ticker, name, model, thinking_budget)
+        else:
+        # Use OpenAI for analysis
+        logger.info(f"Starting OpenAI analysis for {ticker}")
+        system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+
+You will produce a detailed value investing analysis report with the following structure:
+
+# [Company Name] ([Ticker])
+
+## Recommendation
+[Clearly state BUY, SELL, or HOLD here - this must be one of these three words]
+
+## Summary
+[One paragraph summary of the company and your analysis]
+
+## Strengths
+- [Strength 1]
+- [Strength 2]
+- [Additional strengths...]
+
+## Weaknesses
+- [Weakness 1]
+- [Weakness 2]
+- [Additional weaknesses...]
+
+## Price Analysis
+Current Price: $[current price]
+Intrinsic Value: $[your estimated fair value]
+Margin of Safety: [percentage]%
+
+## Investment Rationale
+[Detailed explanation of your recommendation, focusing on value investing principles]
+
+Follow this format exactly as it will be parsed programmatically. Your analysis should be based on the financial statements and data provided, evaluating whether the stock is undervalued, fairly valued, or overvalued according to value investing principles.
+"""
+        response = openai_client.chat.completions.create(
+            model=config["openai"]["model"],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2
+        )
+        
+        # Extract the text from the response
+        text_content = response.choices[0].message.content
+        
+        # Extract components from the response
+        components = extract_analysis_components(text_content)
+        
+        # Create markdown file with the analysis
+        markdown_content = f"# {name} ({ticker}) Analysis\n\n"
+        markdown_content += f"**Analysis Date:** {datetime.date.today().isoformat()}\n\n"
+        markdown_content += f"**Recommendation:** {components.get('recommendation', 'N/A')}\n\n"
+        markdown_content += "## Full Analysis\n\n"
+        markdown_content += text_content
+        
+        # Add disclaimer and save
+        markdown_content += "\n\n---\n\n"
+        markdown_content += "This analysis was performed using SimplyWall.st financial statements data processed through OpenAI's model. "
+        markdown_content += "Each recommendation is based on value investing principles, focusing on company fundamentals, competitive advantages, and margin of safety.\n\n"
+        markdown_content += "Remember that this analysis is one input for investment decisions and should be combined with your own research and risk assessment."
+        
+        # Ensure the directory exists
+        os.makedirs('data/processed/companies/openai', exist_ok=True)
+        
+        # Save the markdown file
+        file_path = f'data/processed/companies/openai/{ticker}.md'
+        with open(file_path, 'w') as f:
+            f.write(markdown_content)
+        
+        logger.info(f"Markdown saved to {file_path}")
+        
+        return {
+            'ticker': ticker,
+            'name': name,
+            'recommendation': components.get('recommendation', 'N/A'),
+            'summary': components.get('summary'),
+            'strengths': components.get('strengths', []),
+            'weaknesses': components.get('weaknesses', []),
+            'analysis_path': file_path
+        } 
