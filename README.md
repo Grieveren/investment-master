@@ -1,6 +1,6 @@
 # Investment Master - Portfolio Analyzer
 
-A Python tool for analyzing stock portfolios using financial data from SimplyWall.st and AI-powered analysis by OpenAI's o3-mini model or Anthropic's Claude model with extended thinking.
+A Python tool for analyzing stock portfolios using financial data from SimplyWall.st and AI-powered analysis by OpenAI's o3-mini model or Anthropic's Claude model with extended thinking. Now includes portfolio optimization based on value investing principles.
 
 ## Features
 
@@ -9,6 +9,7 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 - **Deep Financial Analysis**: Processes all 166 financial statements per company
 - **AI-Powered Recommendations**: Uses either OpenAI's o3-mini model (200K token context) or Anthropic's Claude model with extended thinking to generate value investing signals
 - **In-depth Reporting**: Provides buy/sell/hold recommendations with detailed rationales
+- **Portfolio Optimization**: Analyzes your current holdings and suggests portfolio adjustments based on value investing principles
 - **Robust Error Handling**: Includes retry logic for API calls with exponential backoff
 - **Modular Design**: Well-organized codebase with separate modules for different functions
 
@@ -42,7 +43,12 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
    | 1 | Stock A  | 100    | 50.0  | 5,000        | 10.0%    |
    ```
 
-2. Run the analyzer with your preferred AI model:
+2. (Optional) Place your portfolio export CSV from your broker in the root directory:
+   ```
+   Report_Depotübersicht_vom_07.03.2025_Brett.csv
+   ```
+
+3. Run the analyzer with your preferred AI model:
    ```
    # Using OpenAI (default)
    python portfolio_analyzer.py
@@ -52,9 +58,14 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
    
    # Data fetch only (no analysis)
    python portfolio_analyzer.py --data-only
+   
+   # Skip portfolio optimization
+   python portfolio_analyzer.py --skip-optimization
    ```
 
-3. Review the analysis results in `data/processed/portfolio_analysis.md`
+4. Review the analysis results in `data/processed/portfolio_analysis.md`
+
+5. Review the portfolio optimization recommendations in `data/processed/portfolio_optimization.md`
 
 ## Project Structure
 
@@ -63,10 +74,12 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 ├── config.json                 # Configuration settings
 ├── portfolio_analyzer.py       # Main script
 ├── combined_portfolio.md       # Your portfolio data
+├── Report_Depotübersicht_vom_07.03.2025_Brett.csv  # Exported portfolio data from broker
 ├── data/                       # Data directory
 │   ├── raw/                    # Raw API data
 │   └── processed/              # Processed analysis results
-│       ├── portfolio_analysis.md # Portfolio summary table
+│       ├── portfolio_analysis.md   # Portfolio summary table
+│       ├── portfolio_optimization.md  # Portfolio optimization recommendations
 │       └── companies/          # Individual company analysis files
 ├── logs/                       # Log files
 └── utils/                      # Utility modules
@@ -75,7 +88,8 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
     ├── config.py               # Configuration loader
     ├── file_operations.py      # File handling functions
     ├── logger.py               # Logging setup
-    └── portfolio.py            # Portfolio parsing functions
+    ├── portfolio.py            # Portfolio parsing functions
+    └── portfolio_optimizer.py  # Portfolio optimization functions
 ```
 
 ## How It Works
@@ -86,7 +100,8 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 4. The AI analyzes the data using value investing principles (P/E ratio, P/B ratio, debt levels, etc.)
 5. A comprehensive analysis is generated with buy/sell/hold signals, rationales, and risk factors
 6. Results are saved in both a summary table (`portfolio_analysis_[model].md`) and detailed individual company files in the `companies/[model]` directory
-7. A changelog entry is automatically added to track the analysis run
+7. If a portfolio CSV is available, the portfolio optimization module analyzes your current holdings and suggests allocation adjustments based on the AI analysis
+8. A changelog entry is automatically added to track the analysis run
 
 ## Changelog
 
@@ -143,6 +158,12 @@ Each recommendation includes:
    - Detailed rationale
    - Full valuation assessment 
    - Comprehensive risk factors
+
+The portfolio optimization provides:
+1. A summary of your current portfolio allocation
+2. Recommended target allocation based on value investing principles
+3. Specific buy/sell actions to rebalance your portfolio
+4. Rationales for each recommended change
 
 ## Testing
 

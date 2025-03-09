@@ -19,6 +19,14 @@
     "output": {
         "raw_data_file": "data/raw/api_data.json",
         "analysis_file": "data/processed/portfolio_analysis.md",
-        "companies_dir": "data/processed/companies"
+        "companies_dir": "data/processed/companies",
+        "optimization_file": "data/processed/portfolio_optimization.md"
+    },
+    "portfolio": {
+        "csv_file": "Report_Depotübersicht_vom_07.03.2025_Brett.csv",
+        "optimization": {
+            "buy_boost_factor": 1.5,
+            "sell_reduction_factor": 0.5
+        }
     }
 } 

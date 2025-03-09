@@ -12,6 +12,7 @@ Features:
 - Leverages AI models (OpenAI or Claude) with large context windows for analysis
 - Generates buy/sell/hold recommendations with rationales
 - Saves raw API data and analysis results to files
+- Optimizes portfolio allocation based on analysis results
 
 Note: This script analyzes each stock individually, which takes approximately 15-20 seconds
 per stock. For a portfolio of 11 stocks, the total analysis time will be 3-4 minutes.
@@ -28,7 +29,9 @@ Usage:
    - Full analysis: python portfolio_analyzer.py
    - Data fetch only: python portfolio_analyzer.py --data-only
    - Select model: python portfolio_analyzer.py --model [o3-mini|claude-3-7]
+   - Skip optimization: python portfolio_analyzer.py --skip-optimization
 3. Review the generated analysis in data/processed/portfolio_analysis.md
+4. Review optimization recommendations in data/processed/portfolio_optimization.md
 """
 
 import os
@@ -44,6 +47,7 @@ from utils.api import fetch_all_companies
 from utils.analysis import create_openai_client, create_anthropic_client, get_value_investing_signals
 from utils.file_operations import save_json_data, save_markdown
 from utils.changelog import add_analysis_run_to_changelog, add_changelog_entry
+from utils.portfolio_optimizer import parse_portfolio_csv, map_portfolio_to_analysis, optimize_portfolio, format_optimization_to_markdown
 
 def ensure_directories_exist():
     """Ensure all required directories exist."""
@@ -64,6 +68,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Analyze a portfolio of stocks from a value investing perspective")
     parser.add_argument("--data-only", action="store_true", help="Only fetch and save data, skip analysis")
     parser.add_argument("--model", type=str, help="AI model to use (o3-mini or claude-3-7)")
+    parser.add_argument("--skip-optimization", action="store_true", help="Skip portfolio optimization step")
     return parser.parse_args()
 
 def main():
@@ -76,10 +81,8 @@ def main():
     # Record the start time
     start_time = datetime.datetime.now()
     
-    parser = argparse.ArgumentParser(description="Analyze a portfolio of stocks from a value investing perspective")
-    parser.add_argument("--data-only", action="store_true", help="Only fetch and save data, skip analysis")
-    parser.add_argument("--model", type=str, help="AI model to use (o3-mini or claude-3-7)")
-    args = parser.parse_args()
+    # Parse command line arguments
+    args = parse_args()
     
     if args.data_only:
         print("\nRunning in DATA-ONLY mode (will not run analysis)")
@@ -174,17 +177,94 @@ def main():
     # Generate analysis
     print("Generating value investing analysis...")
     logger.info("Generating value investing analysis...")
-    analysis = get_value_investing_signals(portfolio_data, api_data, openai_client, anthropic_client, model)
     
-    # Save analysis to file with model name in filename
-    model_short_name = "openai" if model == "o3-mini" else "claude"
-    output_file_base = os.path.splitext(config["output"]["analysis_file"])[0]  # Remove extension
-    output_file = f"{output_file_base}_{model_short_name}.md"
+    try:
+        analysis_results = get_value_investing_signals(portfolio_data, api_data, openai_client, anthropic_client, model)
+        
+        # Print debugging information
+        print(f"\nAnalysis results structure: {type(analysis_results)}")
+        if isinstance(analysis_results, dict):
+            print(f"Analysis results keys: {analysis_results.keys()}")
+            if 'stocks' in analysis_results:
+                print(f"Number of analyzed stocks: {len(analysis_results['stocks'])}")
+                if analysis_results['stocks']:
+                    print(f"Example stock data keys: {analysis_results['stocks'][0].keys()}")
+        
+        # Save analysis to file with model name in filename
+        model_short_name = "openai" if model == "o3-mini" else "claude"
+        output_file_base = os.path.splitext(config["output"]["analysis_file"])[0]  # Remove extension
+        output_file = f"{output_file_base}_{model_short_name}.md"
+        
+        print(f"Saving analysis to {output_file}...")
+        
+        if isinstance(analysis_results, dict) and 'markdown' in analysis_results:
+            save_markdown(analysis_results["markdown"], output_file)
+            logger.info(f"Analysis saved to {output_file}")
+            print(f"Analysis saved to {output_file}")
+        else:
+            # Fallback for backward compatibility
+            print("Warning: Analysis results not in expected format, trying to save directly...")
+            save_markdown(str(analysis_results), output_file)
+            logger.warning("Analysis results not in expected format, saved as string")
+    except Exception as e:
+        print(f"Error during analysis generation: {str(e)}")
+        logger.error(f"Error during analysis generation: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("FINISHED: Portfolio Analyzer (with errors)")
+        return
     
-    print(f"Saving analysis to {output_file}...")
-    save_markdown(analysis, output_file)
-    logger.info(f"Analysis saved to {output_file}")
-    print(f"Analysis saved to {output_file}")
+    # Portfolio optimization based on analysis results
+    if not args.skip_optimization:
+        print("\nPerforming portfolio optimization...")
+        logger.info("Performing portfolio optimization...")
+        
+        try:
+            # Parse portfolio CSV file
+            csv_path = config["portfolio"]["csv_file"]
+            print(f"Parsing portfolio data from CSV: {csv_path}")
+            portfolio_csv_data = parse_portfolio_csv(csv_path)
+            
+            if portfolio_csv_data:
+                # Print debugging information
+                print(f"Portfolio CSV data structure: {type(portfolio_csv_data)}")
+                print(f"Number of positions: {len(portfolio_csv_data['positions'])}")
+                
+                # Map portfolio positions to analysis results
+                print("Mapping portfolio data to analysis results...")
+                
+                if not isinstance(analysis_results, dict) or 'stocks' not in analysis_results:
+                    raise ValueError("Analysis results don't contain 'stocks' key. Cannot proceed with optimization.")
+                
+                mapped_positions = map_portfolio_to_analysis(portfolio_csv_data, analysis_results['stocks'])
+                print(f"Mapped {len(mapped_positions)} positions to analysis results")
+                
+                # Generate optimization recommendations
+                print("Generating optimization recommendations...")
+                optimization_results = optimize_portfolio(
+                    mapped_positions, 
+                    total_value=portfolio_csv_data['summary'].get('Depotwert (inkl. Stückzinsen) in EUR')
+                )
+                
+                # Format and save optimization results
+                optimization_md = format_optimization_to_markdown(optimization_results, portfolio_csv_data)
+                optimization_file = config["output"]["optimization_file"]
+                
+                print(f"Saving optimization results to {optimization_file}...")
+                save_markdown(optimization_md, optimization_file)
+                logger.info(f"Optimization results saved to {optimization_file}")
+                print(f"Optimization results saved to {optimization_file}")
+            else:
+                print("Error: Failed to parse portfolio CSV data. Skipping optimization.")
+                logger.error("Failed to parse portfolio CSV data. Skipping optimization.")
+        except Exception as e:
+            print(f"Error during portfolio optimization: {str(e)}")
+            logger.error(f"Error during portfolio optimization: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("Skipping portfolio optimization because --skip-optimization flag was specified.")
+        logger.info("Skipping portfolio optimization because --skip-optimization flag was specified.")
     
     # Calculate total elapsed time
     elapsed_time = (datetime.datetime.now() - start_time).total_seconds()
