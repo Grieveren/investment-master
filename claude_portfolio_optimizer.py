@@ -239,6 +239,34 @@ Based on the above data, please provide:
 
 Please be specific in your recommendations and provide detailed justifications for each proposed change. For example, don't just say "increase Microsoft position", but rather "increase Microsoft (MSFT) position by €X,XXX (approximately X%), because...".
 
+## German Investor Considerations
+
+Please consider that I am a German investor based in Germany, with the following specific considerations:
+
+1. **Tax Implications**:
+   - 26.375% flat tax on capital gains and dividends (25% base rate + 5.5% solidarity surcharge)
+   - €1,000 annual tax-free allowance (Sparerpauschbetrag)
+   - Different tax treatment for accumulating vs. distributing funds
+   - Double taxation issues with US stocks (15% US withholding tax + German taxation)
+   - Tax efficiency of different investment vehicles and asset classes
+
+2. **Currency Considerations**:
+   - EUR is my base currency
+   - Non-EUR denominated stocks introduce currency risk
+   - Currency conversion costs impact total returns
+   - Hedging options for currency risk
+
+3. **Market Access and Trading Costs**:
+   - Different costs for trading on German exchanges (XETRA) vs. international markets
+   - Liquidity differences between German and US markets
+   - Access to German/European-specific investment vehicles
+
+Please factor these German investor considerations into your portfolio recommendations, particularly regarding:
+- Tax efficiency of your proposed changes
+- Currency exposure in the overall portfolio
+- Transaction cost implications of your recommendations
+- Specific advantages/disadvantages for German investors in each position
+
 Use your maximum thinking budget to analyze all data thoroughly and provide the most comprehensive optimization possible.
 """
     
@@ -262,7 +290,7 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
         temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
         
         # System prompt to clarify the task
-        system_prompt = """You are a financial advisor with expertise in value investing. 
+        system_prompt = """You are a financial advisor with expertise in value investing and specific knowledge of German investment considerations. 
 Your task is to provide comprehensive portfolio optimization recommendations based on 
 the detailed portfolio data and individual stock analyses provided. Focus on providing specific, 
 actionable advice with detailed rationales for each recommendation.
@@ -274,6 +302,11 @@ Take your time to think through all aspects of the portfolio in detail:
 4. Compare the growth prospects of each position
 5. Look for potential concentration risks
 6. Assess the alignment with value investing principles
+7. Evaluate tax implications for a German investor (26.375% flat tax, €1,000 annual allowance)
+8. Consider currency risks for non-EUR denominated stocks
+9. Account for market access and trading costs on German exchanges vs. international markets
+
+Remember that you are advising a German investor, so consider German tax laws, EUR as the base currency, and European market access in your recommendations.
 
 Use your maximum thinking capacity to provide the most thorough analysis possible."""
         
@@ -322,6 +355,9 @@ def format_optimization_output(optimization_response, portfolio_data):
     
     # Add note about enhanced analysis mode
     markdown += "**Enhanced Analysis Mode:** This optimization was performed using the complete analysis data for each position with Claude's maximum thinking budget, allowing for more comprehensive and nuanced recommendations.\n\n"
+    
+    # Add note about German investor context
+    markdown += "**German Investor Focus:** This analysis specifically accounts for German tax implications (26.375% flat tax), currency considerations (EUR base), and German market access factors in all recommendations.\n\n"
     
     # Add portfolio summary
     markdown += "## Portfolio Summary\n\n"
