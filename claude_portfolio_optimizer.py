@@ -256,11 +256,17 @@ Please consider that I am a German investor based in Germany, with the following
    - Currency conversion costs impact total returns
    - Hedging options for currency risk
 
-3. **Market Access and Trading Costs**:
-   - Different costs for trading on German exchanges (XETRA) vs. international markets
-   - Liquidity differences between German and US markets
-   - Access to German/European-specific investment vehicles
-   - I trade using a Commerzbank direct depot account, which may have specific fee structures and market access considerations
+3. **Commerzbank Direct Depot Account Specifics**:
+   - Transaction fees: 0.25% of transaction volume + €4.90 (minimum €9.90) for stocks, ETFs, certificates, and bonds on German exchanges
+   - Additional costs for international exchanges may apply
+   - No custody fees when executing at least one trade per quarter (otherwise 0.175% p.a., minimum €4.95 per quarter)
+   - ETF savings plans cost 0.25% of transaction volume + €2.50 per execution
+   - Trading on XETRA and other German exchanges is available
+   - Access to 64 trading venues worldwide
+   - No limit fees for various order types (limit orders, stop orders, trailing stop orders)
+   - Additional €9.50 fee for phone orders
+   - Support for various order types including standard limit orders, stop orders, and trailing stop orders
+   - Automatic tax withholding and reporting to German tax authorities
 
 Please factor these German investor considerations into your portfolio recommendations, particularly regarding:
 - Tax efficiency of your proposed changes
@@ -305,10 +311,15 @@ Take your time to think through all aspects of the portfolio in detail:
 6. Assess the alignment with value investing principles
 7. Evaluate tax implications for a German investor (26.375% flat tax, €1,000 annual allowance)
 8. Consider currency risks for non-EUR denominated stocks
-9. Account for market access and trading costs on German exchanges vs. international markets
-10. Consider the specific fee structure and trading options available through a Commerzbank direct depot account
+9. Account for the specific Commerzbank direct depot fee structure:
+   - 0.25% of transaction volume + €4.90 (minimum €9.90) for trades on German exchanges
+   - No custody fees with at least one trade per quarter
+   - ETF savings plans at 0.25% of volume + €2.50
+   - No fees for limit orders or stop orders
+   - Additional €9.50 fee for phone orders
+10. Consider transaction cost implications when recommending portfolio changes
 
-Remember that you are advising a German investor, so consider German tax laws, EUR as the base currency, and European market access in your recommendations.
+Remember that you are advising a German investor using a Commerzbank direct depot account, so consider German tax laws, EUR as the base currency, and European market access in your recommendations.
 
 Use your maximum thinking capacity to provide the most thorough analysis possible."""
         
