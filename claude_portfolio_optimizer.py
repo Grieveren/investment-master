@@ -260,6 +260,7 @@ Please consider that I am a German investor based in Germany, with the following
    - Different costs for trading on German exchanges (XETRA) vs. international markets
    - Liquidity differences between German and US markets
    - Access to German/European-specific investment vehicles
+   - I trade using a Commerzbank direct depot account, which may have specific fee structures and market access considerations
 
 Please factor these German investor considerations into your portfolio recommendations, particularly regarding:
 - Tax efficiency of your proposed changes
@@ -305,6 +306,7 @@ Take your time to think through all aspects of the portfolio in detail:
 7. Evaluate tax implications for a German investor (26.375% flat tax, €1,000 annual allowance)
 8. Consider currency risks for non-EUR denominated stocks
 9. Account for market access and trading costs on German exchanges vs. international markets
+10. Consider the specific fee structure and trading options available through a Commerzbank direct depot account
 
 Remember that you are advising a German investor, so consider German tax laws, EUR as the base currency, and European market access in your recommendations.
 
@@ -357,7 +359,7 @@ def format_optimization_output(optimization_response, portfolio_data):
     markdown += "**Enhanced Analysis Mode:** This optimization was performed using the complete analysis data for each position with Claude's maximum thinking budget, allowing for more comprehensive and nuanced recommendations.\n\n"
     
     # Add note about German investor context
-    markdown += "**German Investor Focus:** This analysis specifically accounts for German tax implications (26.375% flat tax), currency considerations (EUR base), and German market access factors in all recommendations.\n\n"
+    markdown += "**German Investor Focus:** This analysis specifically accounts for German tax implications (26.375% flat tax), currency considerations (EUR base), German market access factors, and Commerzbank direct depot account considerations in all recommendations.\n\n"
     
     # Add portfolio summary
     markdown += "## Portfolio Summary\n\n"
