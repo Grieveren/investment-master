@@ -138,11 +138,12 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
     
     # Add current positions
     prompt += "## Current Positions\n\n"
-    prompt += "| Position | Ticker | Current Value (€) | % of Portfolio | Purchase Value (€) | Performance | Current Price |\n"
-    prompt += "|----------|--------|------------------|----------------|-------------------|-------------|---------------|\n"
+    prompt += "| Position | Ticker | Current Value (€) | % of Portfolio | Shares | Current Price | Portfolio |\n"
+    prompt += "|----------|--------|------------------|----------------|--------|---------------|----------|\n"
     
     # Prepare data to map portfolio data to analyses
     ticker_map = {
+        # Original format
         "ALLIANZ SE NA O.N.": "ALV",
         "ASML HOLDING    EO -,09": "ASML",
         "ADVANCED MIC.DEV.  DL-,01": "AMD",
@@ -150,16 +151,37 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
         "BERKSH. H.B NEW DL-,00333": "BRK.B",
         "CROWDSTRIKE HLD. DL-,0005": "CRWD",
         "MICROSOFT    DL-,00000625": "MSFT",
-        "NUTANIX INC. A": "NTNX",
+        "NUTANIX INC. A": "NTNX", 
         "NVIDIA CORP.      DL-,001": "NVDA",
-        "TAIWAN SEMICON.MANU.ADR/5": "TSM"
+        "TAIWAN SEMICON.MANU.ADR/5": "TSM",
+        # Add new format entries
+        "GitLab Inc.": "GTLB",
     }
+    
+    # Column mapping for different CSV formats
+    column_mapping = {
+        # Original format
+        "Bezeichnung": ["Bezeichnung", "Security"],
+        "Wert in EUR": ["Wert in EUR", "Market Value (EUR)"],
+        "Anteil im Depot": ["Anteil im Depot", "Weight"],
+        "Einstandswert in EUR": ["Einstandswert in EUR", "Purchase Value (EUR)"],
+        "akt. Kurs": ["akt. Kurs", "Current Price (EUR)"],
+        "Stück/Nominale": ["Stück/Nominale", "Shares"]
+    }
+    
+    # Helper function to get value using column mapping
+    def get_value(position, key):
+        for possible_key in column_mapping.get(key, [key]):
+            if possible_key in position:
+                return position[possible_key]
+        return None
     
     # Track which positions we have analyses for
     positions_with_analyses = []
     
     for position in portfolio_data['positions']:
-        designation = position.get('Bezeichnung')
+        # Get designation using column mapping
+        designation = get_value(position, "Bezeichnung")
         if not designation:
             continue
         
@@ -186,18 +208,25 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
             return default
         
         # Convert values using the safe conversion function
-        current_value = safe_convert(position.get('Wert in EUR', 0))
-        percent = safe_convert(position.get('Anteil im Depot', 0))
-        purchase_value = safe_convert(position.get('Einstandswert in EUR', 0))
-        current_price = safe_convert(position.get('akt. Kurs', 0))
+        current_value = safe_convert(get_value(position, "Wert in EUR"))
         
-        # Calculate performance
-        performance = 0
-        if purchase_value > 0:
-            performance = ((current_value - purchase_value) / purchase_value) * 100
+        # For Weight, handle percentage format
+        weight_value = get_value(position, "Anteil im Depot")
+        if isinstance(weight_value, str) and '%' in weight_value:
+            weight_value = weight_value.replace('%', '')
+        percent = safe_convert(weight_value)
+        
+        # Get shares
+        shares = safe_convert(get_value(position, "Stück/Nominale"))
+        
+        # Get current price
+        current_price = safe_convert(get_value(position, "akt. Kurs"))
+        
+        # Get portfolio identifier if available
+        portfolio_id = position.get('Portfolio', '')
         
         # Add to table
-        prompt += f"| {designation} | {ticker} | €{current_value:,.2f} | {percent:.2f}% | €{purchase_value:,.2f} | {performance:.2f}% | {current_price:.2f} |\n"
+        prompt += f"| {designation} | {ticker} | €{current_value:,.2f} | {percent:.2f}% | {shares:.0f} | {current_price:.2f} | {portfolio_id} |\n"
         
         # Track positions that have analyses
         if ticker in analyses:
