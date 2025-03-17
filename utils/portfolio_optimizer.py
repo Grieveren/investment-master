@@ -46,33 +46,55 @@ def parse_portfolio_csv(csv_path):
     # Split the content into lines
     lines = content.split('\n')
     
+    # Determine the delimiter (semicolon or comma)
+    delimiter = ';'
+    if lines and ',' in lines[0] and ';' not in lines[0]:
+        delimiter = ','
+    
     # Extract portfolio summary from header
     portfolio_summary = {}
-    for i in range(10):  # First 10 lines usually contain summary data
-        if i < len(lines) and ';' in lines[i]:
-            key, value = lines[i].split(';', 1)
-            # Clean up values and convert to appropriate types
-            if 'EUR' in value:
-                # Extract numerical value and convert to float
-                # Remove spaces and replace comma with dot for float conversion
-                clean_value = value.strip()
-                match = re.search(r'([\d.,]+)', clean_value.replace(' ', ''))
-                if match:
-                    # Replace comma with dot for float conversion
-                    num_str = match.group(1).replace('.', '').replace(',', '.')
-                    try:
-                        portfolio_summary[key] = float(num_str)
-                    except ValueError:
+    date = datetime.now().strftime("%Y-%m-%d")  # Default date
+    
+    # If using semicolon format, try to extract summary data
+    if delimiter == ';':
+        for i in range(10):  # First 10 lines usually contain summary data
+            if i < len(lines) and delimiter in lines[i]:
+                key, value = lines[i].split(delimiter, 1)
+                # Clean up values and convert to appropriate types
+                if 'EUR' in value:
+                    # Extract numerical value and convert to float
+                    # Remove spaces and replace comma with dot for float conversion
+                    clean_value = value.strip()
+                    match = re.search(r'([\d.,]+)', clean_value.replace(' ', ''))
+                    if match:
+                        # Replace comma with dot for float conversion
+                        num_str = match.group(1).replace('.', '').replace(',', '.')
+                        try:
+                            portfolio_summary[key] = float(num_str)
+                        except ValueError:
+                            portfolio_summary[key] = clean_value
+                    else:
                         portfolio_summary[key] = clean_value
+                elif '%' in value:
+                    # Extract percentage and convert to float
+                    match = re.search(r'([+-]?[\d.,]+)', value.replace(',', '.'))
+                    if match:
+                        portfolio_summary[key] = float(match.group(1))
                 else:
-                    portfolio_summary[key] = clean_value
-            elif '%' in value:
-                # Extract percentage and convert to float
-                match = re.search(r'([+-]?[\d.,]+)', value.replace(',', '.'))
-                if match:
-                    portfolio_summary[key] = float(match.group(1))
-            else:
-                portfolio_summary[key] = value.strip()
+                    portfolio_summary[key] = value.strip()
+                    
+                # Try to extract date
+                date_match = re.search(r'(\d{2}\.\d{2}\.\d{4})', value)
+                if date_match:
+                    date_str = date_match.group(1)
+                    try:
+                        date_obj = datetime.datetime.strptime(date_str, "%d.%m.%Y")
+                        date = date_obj.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+    
+    # Set the date in the summary
+    portfolio_summary['date'] = date
     
     # Print the extracted summary values for debugging
     print("\nPortfolio summary extracted values:")
@@ -81,17 +103,31 @@ def parse_portfolio_csv(csv_path):
     
     # Find the line with column headers
     header_line_idx = None
+    
+    # Check for traditional semicolon format
     for i, line in enumerate(lines):
-        if line.startswith('Position;Bezeichnung;WKN;ISIN'):
+        if delimiter == ';' and line.startswith('Position;Bezeichnung;WKN;ISIN'):
             header_line_idx = i
             break
+            
+    # Check for comma-separated format (combined_portfolio.csv)
+    if header_line_idx is None and delimiter == ',':
+        for i, line in enumerate(lines):
+            if 'Security' in line and 'ISIN' in line and 'Shares' in line:
+                header_line_idx = i
+                break
     
     if header_line_idx is None:
-        logger.error("Could not find column headers in CSV file.")
-        return {"summary": portfolio_summary, "positions": []}
+        # If we can't find a header line but it looks like a CSV, use the first line
+        if lines and delimiter in lines[0]:
+            header_line_idx = 0
+        else:
+            logger.error("Could not find column headers in CSV file.")
+            return {"summary": portfolio_summary, "positions": []}
     
     # Get column headers
-    headers = lines[header_line_idx].split(';')
+    headers = lines[header_line_idx].split(delimiter)
+    headers = [h.strip() for h in headers]
     
     # Parse positions
     positions = []
@@ -100,7 +136,14 @@ def parse_portfolio_csv(csv_path):
         if not line or line.startswith('Diese Aufstellung'):
             break
         
-        values = line.split(';')
+        # For the comma-separated format, handle quoted values correctly
+        if delimiter == ',':
+            # Use the csv module to handle quotes properly
+            import csv
+            values = next(csv.reader([line], delimiter=delimiter, quotechar='"'))
+        else:
+            values = line.split(delimiter)
+        
         if len(values) < len(headers):
             continue
         
@@ -108,7 +151,7 @@ def parse_portfolio_csv(csv_path):
         for j, header in enumerate(headers):
             if j < len(values):
                 # Clean and convert values based on their type
-                value = values[j].strip()
+                value = values[j].strip() if values[j] else ""
                 
                 # Skip empty values
                 if not value:

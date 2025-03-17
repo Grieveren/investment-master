@@ -96,42 +96,42 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
     
     Args:
         portfolio_data (dict): Portfolio data from parse_portfolio_csv.
-        analyses (dict): Dictionary mapping tickers to their analysis content.
+        analyses (dict): Dictionary of company analyses keyed by ticker.
         
     Returns:
-        str: Complete prompt for Claude.
+        str: Comprehensive prompt for Claude.
     """
-    # Start with a description of the task
-    prompt = """
-# Portfolio Optimization Task
+    logger.info("Creating portfolio optimization prompt...")
+    
+    # Calculate total portfolio value from positions
+    total_value = 0
+    for position in portfolio_data.get('positions', []):
+        market_value = position.get('Market Value (EUR)')
+        if market_value:
+            # Handle numeric or string representations
+            if isinstance(market_value, (int, float)):
+                total_value += market_value
+            elif isinstance(market_value, str):
+                # Try to convert string to float, handling commas and periods
+                try:
+                    # Remove currency symbols, spaces, and handle European number format
+                    clean_value = market_value.replace('€', '').replace(' ', '')
+                    # Convert European format (1.234,56) to standard format (1234.56)
+                    clean_value = clean_value.replace('.', '').replace(',', '.')
+                    total_value += float(clean_value)
+                except ValueError:
+                    logger.warning(f"Could not convert market value: {market_value}")
+    
+    logger.info(f"Portfolio total value: €{total_value:,.2f}")
+    
+    # Create the prompt
+    prompt = """# Portfolio Optimization Analysis Request
 
-## Overview
-You are tasked with providing a holistic portfolio optimization recommendation based on the following:
-1. Current portfolio allocation and performance data
-2. Individual value investing analyses for each stock
-3. Overall market conditions and portfolio diversification
+## Portfolio Overview
 
-Your job is to recommend specific changes to the portfolio allocation with detailed rationales.
-
-## Current Portfolio Data
-
-Portfolio summary:
 """
     
     # Add portfolio summary
-    total_value_str = portfolio_data['summary'].get('Depotwert (inkl. Stückzinsen) in EUR', '0')
-    # Convert string to float - handle European format
-    try:
-        # Remove any non-numeric characters except for comma and period
-        cleaned_value = ''.join(c for c in total_value_str if c.isdigit() or c in ',.').strip()
-        # Replace comma with period for float conversion
-        cleaned_value = cleaned_value.replace('.', '').replace(',', '.')
-        total_value = float(cleaned_value)
-        logger.info(f"Portfolio total value: €{total_value:,.2f}")
-    except (ValueError, TypeError) as e:
-        logger.warning(f"Could not convert total value string: {total_value_str}, using 0. Error: {e}")
-        total_value = 0.0
-    
     prompt += f"- Total portfolio value: €{total_value:,.2f}\n"
     prompt += f"- Number of positions: {len(portfolio_data['positions'])}\n"
     prompt += f"- Date: {portfolio_data.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))}\n\n"
@@ -350,12 +350,13 @@ Use your maximum thinking capacity to provide the most thorough analysis possibl
         return f"Error getting portfolio optimization: {str(e)}"
 
 
-def format_optimization_output(optimization_response, portfolio_data):
+def format_optimization_output(optimization_response, portfolio_data, total_value=0.0):
     """Format Claude's optimization response for output.
     
     Args:
         optimization_response (str): Claude's response text.
         portfolio_data (dict): Original portfolio data.
+        total_value (float): The calculated total portfolio value.
         
     Returns:
         str: Markdown-formatted optimization recommendations.
@@ -375,35 +376,13 @@ def format_optimization_output(optimization_response, portfolio_data):
     # Add portfolio summary
     markdown += "## Portfolio Summary\n\n"
     
-    # Function to safely convert values, handling both numeric and string input
-    def safe_convert(value, default=0.0):
-        if isinstance(value, (int, float)):
-            return float(value)
-        elif isinstance(value, str):
-            try:
-                # Remove non-numeric characters except digits, comma, period
-                clean_str = ''.join(c for c in value if c.isdigit() or c in ',.').strip()
-                # Convert European format (1.234,56) to standard format (1234.56)
-                clean_str = clean_str.replace('.', '').replace(',', '.')
-                return float(clean_str)
-            except (ValueError, TypeError):
-                return default
-        return default
-    
-    # Convert total value using the safe conversion function
-    total_value_str = portfolio_data['summary'].get('Depotwert (inkl. Stückzinsen) in EUR', '0')
-    total_value = safe_convert(total_value_str)
-    
+    # Add the total value with proper formatting
     markdown += f"Total portfolio value: €{total_value:,.2f}\n"
     markdown += f"Total positions: {len(portfolio_data['positions'])}\n\n"
     
-    # Add Claude's optimization response
+    # Add optimization recommendations
     markdown += "## Recommendations\n\n"
     markdown += optimization_response
-    
-    # Add disclaimer
-    markdown += "\n\n---\n\n"
-    markdown += "*Disclaimer: These recommendations are generated algorithmically based on financial analysis and value investing principles. They should be considered as one input among many for your investment decisions. Always do your own research and consider consulting with a financial advisor before making investment decisions.*"
     
     return markdown
 
@@ -482,6 +461,25 @@ def main():
         print("Creating portfolio optimization prompt...")
         prompt = create_claude_portfolio_prompt(portfolio_data, analyses)
         
+        # Get the calculated total value
+        total_value = 0
+        for position in portfolio_data.get('positions', []):
+            market_value = position.get('Market Value (EUR)')
+            if market_value:
+                # Handle numeric or string representations
+                if isinstance(market_value, (int, float)):
+                    total_value += market_value
+                elif isinstance(market_value, str):
+                    # Try to convert string to float, handling commas and periods
+                    try:
+                        # Remove currency symbols, spaces, and handle European number format
+                        clean_value = market_value.replace('€', '').replace(' ', '')
+                        # Convert European format (1.234,56) to standard format (1234.56)
+                        clean_value = clean_value.replace('.', '').replace(',', '.')
+                        total_value += float(clean_value)
+                    except ValueError:
+                        logger.warning(f"Could not convert market value: {market_value}")
+        
         # Get optimization recommendations from Claude
         claude_model = config["claude"]["model"]
         thinking_budget = config["claude"].get("thinking_budget", 16000)
@@ -493,7 +491,7 @@ def main():
         # Format and save the output
         logger.info("Formatting and saving optimization results...")
         print("Formatting and saving optimization results...")
-        output_markdown = format_optimization_output(optimization_response, portfolio_data)
+        output_markdown = format_optimization_output(optimization_response, portfolio_data, total_value)
         output_file = config["output"]["claude_optimization_file"]
         save_markdown(output_markdown, output_file)
         logger.info(f"Optimization recommendations saved to {output_file}")
