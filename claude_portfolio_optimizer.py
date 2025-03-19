@@ -78,13 +78,13 @@ def read_company_analyses():
     for file_path in company_files:
         ticker = os.path.basename(file_path).replace(".md", "")
         # Handle tickers with underscores that should be periods (like BRK_B → BRK.B)
-        ticker = ticker.replace("_", ".")
+        normalized_ticker = ticker.replace("_", ".")
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            analyses[ticker] = content
-            logger.debug(f"Loaded analysis for {ticker}")
+            analyses[normalized_ticker] = content
+            logger.debug(f"Loaded analysis for {normalized_ticker}")
         except Exception as e:
             logger.error(f"Error reading {file_path}: {e}")
     
