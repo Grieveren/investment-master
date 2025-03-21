@@ -30,7 +30,7 @@
             "sell_reduction_factor": 0.5
         },
         "claude_optimization": {
-            "output_tokens": 4000,
+            "output_tokens": 10000,
             "temperature": 1.0,
             "include_strengths_weaknesses": true
         }
