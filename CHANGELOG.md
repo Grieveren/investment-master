@@ -1,8 +1,26 @@
 # Changelog
 
+## 2025-03-21: Implemented Streaming for Individual Company Analysis
+
+- Added streaming implementation with visual progress indicators for individual stock analysis
+- Updated company analysis process to show real-time feedback during analysis
+- Implemented progress tracking for both thinking and text generation phases
+- Added streaming information to company analysis output
+
 ## 2025-03-21: Updated Documentation for Extended Thinking and Streaming
 
 Updated all project documentation to reflect the increased thinking budget and streaming implementation
+
+- All project documentation updated to reflect the increase of thinking budget from 16,000 to 32,000 tokens
+- Added documentation about streaming implementation for real-time feedback
+- Files changed:
+  - README.md
+  - claude_test_README.md
+  - utils/analysis.py
+- Tasks completed:
+  - Updated all references to thinking budget
+  - Added documentation about streaming
+  - Ensured consistency across all project files
 
 ### Files Changed
 - `README.md`
