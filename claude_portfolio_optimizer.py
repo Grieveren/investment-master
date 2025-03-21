@@ -350,9 +350,11 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
         str: Text response from Claude or error message.
     """
     try:
-        # Get configuration values - use thinking_budget for max_tokens
+        # Get configuration values
         thinking_budget = config["claude"].get("thinking_budget", 32000)
-        max_tokens = config["portfolio"]["claude_optimization"].get("max_tokens", 4000)
+        output_tokens = config["portfolio"]["claude_optimization"].get("output_tokens", 4000)
+        # max_tokens must be larger than thinking_budget according to Anthropic's docs
+        max_tokens = thinking_budget + output_tokens
         temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
         
         # System prompt to clarify the task
@@ -414,7 +416,7 @@ most thorough and detailed analysis possible. Don't rush your analysis - take ti
 each position's unique characteristics and how it fits into the overall portfolio strategy."""
         
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
-        logger.info(f"Using maximum thinking budget: {thinking_budget} tokens")
+        logger.info(f"Using thinking budget: {thinking_budget} tokens with total max_tokens: {max_tokens} tokens")
         logger.debug(f"Prompt length: {len(prompt)} characters")
         
         start_time = time.time()
@@ -459,10 +461,15 @@ def format_optimization_output(optimization_response, portfolio_data, total_valu
     markdown += f"**Analysis Date:** {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
     
     # Add note about enhanced analysis mode
+    thinking_budget = config["claude"].get("thinking_budget", 32000)
+    output_tokens = config["portfolio"]["claude_optimization"].get("output_tokens", 4000)
+    max_tokens = thinking_budget + output_tokens
+    
     markdown += (
-        "**Enhanced Analysis Mode:** This optimization was performed using the complete "
-        "analysis data for each position with Claude's enhanced thinking budget of 32,000 tokens, allowing "
-        "for more comprehensive and nuanced recommendations.\n\n"
+        f"**Enhanced Analysis Mode:** This optimization was performed using the complete "
+        f"analysis data for each position with Claude's extended thinking capability ({thinking_budget} tokens "
+        f"thinking budget and {output_tokens} output tokens), allowing "
+        f"for more comprehensive and nuanced recommendations.\n\n"
     )
     
     # Add note about German investor context
@@ -587,13 +594,16 @@ def main():
         # Get optimization recommendations from Claude
         claude_model = config["claude"]["model"]
         thinking_budget = config["claude"].get("thinking_budget", 32000)
+        output_tokens = config["portfolio"]["claude_optimization"].get("output_tokens", 4000)
+        max_tokens = thinking_budget + output_tokens
+        
         logger.info(
             f"Requesting portfolio optimization from Claude ({claude_model}) "
-            f"with {thinking_budget} token thinking budget..."
+            f"with {thinking_budget} token thinking budget and {max_tokens} total max tokens..."
         )
         print(
             f"Requesting portfolio optimization from Claude ({claude_model}) "
-            f"with {thinking_budget} token thinking budget..."
+            f"with {thinking_budget} token thinking budget and {max_tokens} total max tokens..."
         )
         print("This may take longer than usual due to full analysis processing...")
         optimization_response = get_claude_portfolio_optimization(
