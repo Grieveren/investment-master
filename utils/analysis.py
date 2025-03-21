@@ -527,7 +527,7 @@ This format will be used to guide investment decisions, so be thorough and objec
         # Use streaming to get the response
         with client.messages.stream(
             model=model,
-            max_tokens=20000,  # Increased to be greater than thinking budget
+            max_tokens=thinking_budget + 5000,  # Ensure max_tokens is greater than thinking_budget
             thinking={"type": "enabled", "budget_tokens": thinking_budget},
             system=system_prompt,
             messages=[
