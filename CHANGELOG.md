@@ -1,5 +1,20 @@
 # Changelog
 
+## 2025-03-21: Increased Claude thinking budget
+
+Doubled Claude's thinking budget from 16,000 to 32,000 tokens to enable deeper portfolio analysis
+
+### Files Changed
+- `config.json`
+- `claude_portfolio_optimizer.py`
+
+### Tasks Completed
+- Updated config.json to increase thinking_budget to 32,000
+- Modified claude_portfolio_optimizer.py to use the thinking parameter correctly
+- Enhanced the system prompt to leverage the expanded thinking budget
+
+
+
 ## 2025-03-19: Portfolio Analysis Run (Anthropic Claude)
 
 Ran portfolio analysis on 11 stocks using Anthropic Claude model.

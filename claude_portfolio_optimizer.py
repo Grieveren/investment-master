@@ -25,12 +25,9 @@ python claude_portfolio_optimizer.py
 """
 
 import os
-import sys
 import glob
-import json
 import datetime
 import time
-import re
 import traceback
 from dotenv import load_dotenv
 import anthropic
@@ -134,12 +131,17 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
     # Add portfolio summary
     prompt += f"- Total portfolio value: €{total_value:,.2f}\n"
     prompt += f"- Number of positions: {len(portfolio_data['positions'])}\n"
-    prompt += f"- Date: {portfolio_data.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))}\n\n"
+    current_date = portfolio_data.get(
+        'date', datetime.datetime.now().strftime('%Y-%m-%d')
+    )
+    prompt += f"- Date: {current_date}\n\n"
     
     # Add current positions
     prompt += "## Current Positions\n\n"
-    prompt += "| Position | Ticker | Current Value (€) | % of Portfolio | Shares | Current Price | Portfolio |\n"
-    prompt += "|----------|--------|------------------|----------------|--------|---------------|----------|\n"
+    prompt += "| Position | Ticker | Current Value (€) | % of Portfolio | "
+    prompt += "Shares | Current Price | Portfolio |\n"
+    prompt += "|----------|--------|------------------|----------------|"
+    prompt += "--------|---------------|----------|\n"
     
     # Prepare data to map portfolio data to analyses
     ticker_map = {
@@ -199,7 +201,8 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
             elif isinstance(value, str):
                 try:
                     # Remove non-numeric characters except digits, comma, period
-                    clean_str = ''.join(c for c in value if c.isdigit() or c in ',.').strip()
+                    clean_str = ''.join(
+                        c for c in value if c.isdigit() or c in ',.').strip()
                     # Convert European format (1.234,56) to standard format (1234.56)
                     clean_str = clean_str.replace('.', '').replace(',', '.')
                     return float(clean_str)
@@ -226,7 +229,9 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
         portfolio_id = position.get('Portfolio', '')
         
         # Add to table
-        prompt += f"| {designation} | {ticker} | €{current_value:,.2f} | {percent:.2f}% | {shares:.0f} | {current_price:.2f} | {portfolio_id} |\n"
+        prompt += f"| {designation} | {ticker} | €{current_value:,.2f} | "
+        prompt += f"{percent:.2f}% | {shares:.0f} | {current_price:.2f} | "
+        prompt += f"{portfolio_id} |\n"
         
         # Track positions that have analyses
         if ticker in analyses:
@@ -243,15 +248,19 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
         # Include the complete analysis - no extraction of sections
         analysis = analyses.get(ticker, "No analysis available")
         prompt += analysis + "\n\n"
-        logger.info(f"Added complete analysis for {ticker} ({len(analysis)} characters)")
+        analysis_len = len(analysis)
+        logger.info(f"Added complete analysis for {ticker} ({analysis_len} characters)")
     
     # Add final optimization request
     prompt += """
 ## Portfolio Optimization Request
 
-IMPORTANT: Only make recommendations for positions that are ALREADY in the portfolio. DO NOT suggest adding any new positions that aren't listed in the Current Positions table above.
+IMPORTANT: Only make recommendations for positions that are ALREADY in the portfolio. 
+DO NOT suggest adding any new positions that aren't listed in the Current Positions 
+table above.
 
-IMPORTANT: Treat all three portfolios (Work, Family, Brett) as ONE UNIFIED PORTFOLIO. When making recommendations:
+IMPORTANT: Treat all three portfolios (Work, Family, Brett) as ONE UNIFIED PORTFOLIO. 
+When making recommendations:
 1. Consider duplicate positions across portfolios as a single consolidated position
 2. Do not distinguish which sub-portfolio a position belongs to in your recommendations
 3. Evaluate positions purely on their investment merits, not on which sub-portfolio they're in
@@ -259,26 +268,33 @@ IMPORTANT: Treat all three portfolios (Work, Family, Brett) as ONE UNIFIED PORTF
 
 Based on the above data, please provide:
 
-1. **Overall Analysis**: A comprehensive analysis of the current portfolio considering diversification, sector allocation, risk profile, and alignment with value investing principles.
+1. **Overall Analysis**: A comprehensive analysis of the current portfolio considering 
+   diversification, sector allocation, risk profile, and alignment with value investing 
+   principles.
 
 2. **Recommended Changes**: Specific recommendations for rebalancing the portfolio, including:
    - Positions to increase (with specific amounts in euros and percentages)
    - Positions to decrease (with specific amounts in euros and percentages)
    - Positions to maintain
 
-3. **Detailed Rationales**: For each recommended change, provide a detailed explanation of the rationale, considering:
+3. **Detailed Rationales**: For each recommended change, provide a detailed explanation 
+   of the rationale, considering:
    - Intrinsic value estimates and margin of safety
    - Growth prospects and competitive position
    - Portfolio balance considerations
    - Risk management considerations
 
-4. **Overall Optimization Strategy**: Explain the overall portfolio optimization strategy and how it aligns with value investing principles.
+4. **Overall Optimization Strategy**: Explain the overall portfolio optimization strategy 
+   and how it aligns with value investing principles.
 
-Please be specific in your recommendations and provide detailed justifications for each proposed change. For example, don't just say "increase Microsoft position", but rather "increase Microsoft (MSFT) position by €X,XXX (approximately X%), because...".
+Please be specific in your recommendations and provide detailed justifications for each 
+proposed change. For example, don't just say "increase Microsoft position", but rather 
+"increase Microsoft (MSFT) position by €X,XXX (approximately X%), because...".
 
 ## German Investor Considerations
 
-Please consider that I am a German investor based in Germany, with the following specific considerations:
+Please consider that I am a German investor based in Germany, with the following specific 
+considerations:
 
 1. **Tax Implications**:
    - 26.375% flat tax on capital gains and dividends (25% base rate + 5.5% solidarity surcharge)
@@ -294,24 +310,29 @@ Please consider that I am a German investor based in Germany, with the following
    - Hedging options for currency risk
 
 3. **Commerzbank Direct Depot Account Specifics**:
-   - Transaction fees: 0.25% of transaction volume + €4.90 (minimum €9.90) for stocks, ETFs, certificates, and bonds on German exchanges
+   - Transaction fees: 0.25% of transaction volume + €4.90 (minimum €9.90) for stocks, 
+     ETFs, certificates, and bonds on German exchanges
    - Additional costs for international exchanges may apply
-   - No custody fees when executing at least one trade per quarter (otherwise 0.175% p.a., minimum €4.95 per quarter)
+   - No custody fees when executing at least one trade per quarter (otherwise 0.175% p.a., 
+     minimum €4.95 per quarter)
    - ETF savings plans cost 0.25% of transaction volume + €2.50 per execution
    - Trading on XETRA and other German exchanges is available
    - Access to 64 trading venues worldwide
    - No limit fees for various order types (limit orders, stop orders, trailing stop orders)
    - Additional €9.50 fee for phone orders
-   - Support for various order types including standard limit orders, stop orders, and trailing stop orders
+   - Support for various order types including standard limit orders, stop orders, 
+     and trailing stop orders
    - Automatic tax withholding and reporting to German tax authorities
 
-Please factor these German investor considerations into your portfolio recommendations, particularly regarding:
+Please factor these German investor considerations into your portfolio recommendations, 
+particularly regarding:
 - Tax efficiency of your proposed changes
 - Currency exposure in the overall portfolio
 - Transaction cost implications of your recommendations
 - Specific advantages/disadvantages for German investors in each position
 
-Use your maximum thinking budget to analyze all data thoroughly and provide the most comprehensive optimization possible.
+Use your maximum thinking budget to analyze all data thoroughly and provide the most 
+comprehensive optimization possible.
 """
     
     return prompt
@@ -330,24 +351,44 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
     """
     try:
         # Get configuration values - use thinking_budget for max_tokens
-        max_tokens = config["claude"].get("thinking_budget", 16000)
+        thinking_budget = config["claude"].get("thinking_budget", 32000)
+        max_tokens = config["portfolio"]["claude_optimization"].get("max_tokens", 4000)
         temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
         
         # System prompt to clarify the task
-        system_prompt = """You are a financial advisor with expertise in value investing and specific knowledge of German investment considerations. 
+        system_prompt = """You are a financial advisor with expertise in value investing and 
+specific knowledge of German investment considerations.
 Your task is to provide comprehensive portfolio optimization recommendations based on 
-the detailed portfolio data and individual stock analyses provided. Focus on providing specific, 
+the detailed portfolio data and individual stock analyses provided. Focus on providing specific,
 actionable advice with detailed rationales for each recommendation.
 
 Take your time to think through all aspects of the portfolio in detail:
 1. Consider the intrinsic value of each stock compared to its current price
+   - Perform detailed DCF calculations when possible
+   - Apply appropriate margin of safety for each company based on its specific risks
+   - Explain your valuation methodology for each position
 2. Analyze sector allocations and diversification
+   - Compare current sector weights against appropriate benchmarks
+   - Identify sectors that are overweight or underweight
 3. Evaluate the risk profile of the overall portfolio
+   - Assess both systematic and unsystematic risks
+   - Consider correlation between positions and diversification effects
 4. Compare the growth prospects of each position
+   - Analyze historical growth rates and future projections
+   - Consider industry trends and competitive positioning
 5. Look for potential concentration risks
+   - Geographic concentration
+   - Sector concentration
+   - Risk factor concentration (e.g., interest rate sensitivity)
 6. Assess the alignment with value investing principles
+   - Focus on quantitative metrics like P/E, P/B, debt levels, etc.
+   - Evaluate qualitative factors like competitive advantages and management quality
 7. Evaluate tax implications for a German investor (26.375% flat tax, €1,000 annual allowance)
+   - Consider tax-efficient rebalancing strategies
+   - Evaluate impact of dividend withholding taxes for different countries
 8. Consider currency risks for non-EUR denominated stocks
+   - Analyze historical currency volatility
+   - Assess hedging needs for different currency exposures
 9. Account for the specific Commerzbank direct depot fee structure:
    - 0.25% of transaction volume + €4.90 (minimum €9.90) for trades on German exchanges
    - No custody fees with at least one trade per quarter
@@ -355,13 +396,25 @@ Take your time to think through all aspects of the portfolio in detail:
    - No fees for limit orders or stop orders
    - Additional €9.50 fee for phone orders
 10. Consider transaction cost implications when recommending portfolio changes
+    - Minimize unnecessary transactions
+    - Batch similar orders when possible
 
-Remember that you are advising a German investor using a Commerzbank direct depot account, so consider German tax laws, EUR as the base currency, and European market access in your recommendations.
+For each position in the portfolio, provide:
+1. A clear buy/hold/sell recommendation with specific percentage adjustments
+2. A detailed rationale explaining your recommendation
+3. Company-specific risk factors that influenced your decision
+4. Intrinsic value estimates and your calculation methodology
 
-Use your maximum thinking capacity to provide the most thorough analysis possible."""
+Remember that you are advising a German investor using a Commerzbank direct depot account,
+so consider German tax laws, EUR as the base currency, and European market access in
+your recommendations.
+
+You have an expanded thinking budget of 32,000 tokens, so use this capacity to provide the 
+most thorough and detailed analysis possible. Don't rush your analysis - take time to consider 
+each position's unique characteristics and how it fits into the overall portfolio strategy."""
         
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
-        logger.info(f"Using maximum thinking budget: {max_tokens} tokens")
+        logger.info(f"Using maximum thinking budget: {thinking_budget} tokens")
         logger.debug(f"Prompt length: {len(prompt)} characters")
         
         start_time = time.time()
@@ -369,6 +422,7 @@ Use your maximum thinking capacity to provide the most thorough analysis possibl
         message = client.messages.create(
             model=model,
             max_tokens=max_tokens,
+            thinking={"type": "enabled", "budget_tokens": thinking_budget},
             system=system_prompt,
             messages=[
                 {"role": "user", "content": prompt}
@@ -405,10 +459,19 @@ def format_optimization_output(optimization_response, portfolio_data, total_valu
     markdown += f"**Analysis Date:** {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
     
     # Add note about enhanced analysis mode
-    markdown += "**Enhanced Analysis Mode:** This optimization was performed using the complete analysis data for each position with Claude's maximum thinking budget, allowing for more comprehensive and nuanced recommendations.\n\n"
+    markdown += (
+        "**Enhanced Analysis Mode:** This optimization was performed using the complete "
+        "analysis data for each position with Claude's enhanced thinking budget of 32,000 tokens, allowing "
+        "for more comprehensive and nuanced recommendations.\n\n"
+    )
     
     # Add note about German investor context
-    markdown += "**German Investor Focus:** This analysis specifically accounts for German tax implications (26.375% flat tax), currency considerations (EUR base), German market access factors, and Commerzbank direct depot account considerations in all recommendations.\n\n"
+    markdown += (
+        "**German Investor Focus:** This analysis specifically accounts for German tax "
+        "implications (26.375% flat tax), currency considerations (EUR base), German "
+        "market access factors, and Commerzbank direct depot account considerations in "
+        "all recommendations.\n\n"
+    )
     
     # Add portfolio summary
     markdown += "## Portfolio Summary\n\n"
@@ -490,8 +553,12 @@ def main():
             print(f"Error parsing portfolio data from {csv_path}")
             return
         
-        logger.info(f"Successfully parsed portfolio data with {len(portfolio_data['positions'])} positions")
-        print(f"Successfully parsed portfolio data with {len(portfolio_data['positions'])} positions")
+        logger.info(
+            f"Successfully parsed portfolio data with {len(portfolio_data['positions'])} positions"
+        )
+        print(
+            f"Successfully parsed portfolio data with {len(portfolio_data['positions'])} positions"
+        )
         
         # Create prompt for Claude
         logger.info("Creating portfolio optimization prompt...")
@@ -519,16 +586,26 @@ def main():
         
         # Get optimization recommendations from Claude
         claude_model = config["claude"]["model"]
-        thinking_budget = config["claude"].get("thinking_budget", 16000)
-        logger.info(f"Requesting portfolio optimization from Claude ({claude_model}) with {thinking_budget} token thinking budget...")
-        print(f"Requesting portfolio optimization from Claude ({claude_model}) with {thinking_budget} token thinking budget...")
+        thinking_budget = config["claude"].get("thinking_budget", 32000)
+        logger.info(
+            f"Requesting portfolio optimization from Claude ({claude_model}) "
+            f"with {thinking_budget} token thinking budget..."
+        )
+        print(
+            f"Requesting portfolio optimization from Claude ({claude_model}) "
+            f"with {thinking_budget} token thinking budget..."
+        )
         print("This may take longer than usual due to full analysis processing...")
-        optimization_response = get_claude_portfolio_optimization(prompt, client, model=claude_model)
+        optimization_response = get_claude_portfolio_optimization(
+            prompt, client, model=claude_model
+        )
         
         # Format and save the output
         logger.info("Formatting and saving optimization results...")
         print("Formatting and saving optimization results...")
-        output_markdown = format_optimization_output(optimization_response, portfolio_data, total_value)
+        output_markdown = format_optimization_output(
+            optimization_response, portfolio_data, total_value
+        )
         output_file = config["output"]["claude_optimization_file"]
         save_markdown(output_markdown, output_file)
         logger.info(f"Optimization recommendations saved to {output_file}")
