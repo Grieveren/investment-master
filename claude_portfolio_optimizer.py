@@ -339,7 +339,7 @@ comprehensive optimization possible.
 
 
 def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-20250219"):
-    """Get portfolio optimization recommendations from Claude.
+    """Get portfolio optimization recommendations from Claude using streaming.
     
     Args:
         prompt (str): The comprehensive portfolio prompt.
@@ -418,10 +418,24 @@ each position's unique characteristics and how it fits into the overall portfoli
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
         logger.info(f"Using thinking budget: {thinking_budget} tokens with total max_tokens: {max_tokens} tokens")
         logger.debug(f"Prompt length: {len(prompt)} characters")
+        print(f"Starting Claude analysis with {thinking_budget} token thinking budget...")
+        print("This will take some time. Progress will be shown as Claude processes the data...")
         
         start_time = time.time()
         
-        message = client.messages.create(
+        # Variables to track streaming progress
+        full_response = ""
+        current_thinking = ""
+        current_text = ""
+        thinking_in_progress = False
+        text_in_progress = False
+        thinking_chunks = 0
+        text_chunks = 0
+        last_progress_time = time.time()
+        progress_interval = 5  # Show progress every 5 seconds
+        
+        # Use streaming to get the response
+        with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
             thinking={"type": "enabled", "budget_tokens": thinking_budget},
@@ -430,12 +444,77 @@ each position's unique characteristics and how it fits into the overall portfoli
                 {"role": "user", "content": prompt}
             ],
             temperature=temperature
-        )
+        ) as stream:
+            # Display initial progress message
+            print("Claude's thinking process has started...")
+            
+            # Process the streaming events
+            for event in stream:
+                current_time = time.time()
+                
+                # Handle message start
+                if event.type == "message_start":
+                    pass
+                
+                # Handle content block start
+                elif event.type == "content_block_start":
+                    if event.content_block.type == "thinking":
+                        thinking_in_progress = True
+                        text_in_progress = False
+                        thinking_chunks = 0
+                        if current_time - last_progress_time > progress_interval:
+                            print("Claude is analyzing the portfolio data...")
+                            last_progress_time = current_time
+                    elif event.content_block.type == "text":
+                        text_in_progress = True
+                        thinking_in_progress = False
+                        text_chunks = 0
+                        print("\nAnalysis complete! Claude is now generating recommendations...")
+                
+                # Handle content block delta (the actual content chunks)
+                elif event.type == "content_block_delta":
+                    if hasattr(event.delta, "thinking") and thinking_in_progress:
+                        thinking_chunk = event.delta.thinking
+                        current_thinking += thinking_chunk
+                        thinking_chunks += 1
+                        # Periodically show progress for thinking
+                        if current_time - last_progress_time > progress_interval:
+                            elapsed = current_time - start_time
+                            print(f"Still thinking... ({elapsed:.1f}s elapsed, {thinking_chunks} thinking chunks processed)")
+                            last_progress_time = current_time
+                    elif hasattr(event.delta, "text") and text_in_progress:
+                        text_chunk = event.delta.text
+                        current_text += text_chunk
+                        text_chunks += 1
+                        # Show progress for text generation
+                        if text_chunks % 20 == 0:  # Show more frequent updates for text
+                            progress_char = "." * (text_chunks // 20 % 4 + 1)
+                            print(f"Generating recommendations{progress_char}", end="\r")
+                
+                # Handle content block stop
+                elif event.type == "content_block_stop":
+                    if thinking_in_progress:
+                        thinking_in_progress = False
+                        logger.info(f"Thinking complete: {len(current_thinking)} characters in {thinking_chunks} chunks")
+                    elif text_in_progress:
+                        text_in_progress = False
+                        logger.info(f"Text complete: {len(current_text)} characters in {text_chunks} chunks")
+                
+                # Handle message delta
+                elif event.type == "message_delta":
+                    if event.delta.stop_reason:
+                        logger.info(f"Message stopped with reason: {event.delta.stop_reason}")
+                
+                # Handle message stop (end of stream)
+                elif event.type == "message_stop":
+                    full_response = current_text
+                    logger.info("Streaming complete")
         
         elapsed_time = time.time() - start_time
         logger.info(f"Claude portfolio optimization completed in {elapsed_time:.1f}s")
+        print(f"\nPortfolio optimization complete! (took {elapsed_time:.1f} seconds)")
         
-        return message.content[0].text
+        return full_response
     except Exception as e:
         error_msg = f"Error getting portfolio optimization from Claude: {str(e)}"
         logger.error(error_msg)
@@ -468,7 +547,8 @@ def format_optimization_output(optimization_response, portfolio_data, total_valu
     markdown += (
         f"**Enhanced Analysis Mode:** This optimization was performed using the complete "
         f"analysis data for each position with Claude's extended thinking capability ({thinking_budget} tokens "
-        f"thinking budget and {output_tokens} output tokens), allowing "
+        f"thinking budget and {output_tokens} output tokens). The analysis was processed using "
+        f"streaming mode for improved response time and continuous feedback, allowing "
         f"for more comprehensive and nuanced recommendations.\n\n"
     )
     
@@ -601,11 +681,14 @@ def main():
             f"Requesting portfolio optimization from Claude ({claude_model}) "
             f"with {thinking_budget} token thinking budget and {max_tokens} total max tokens..."
         )
-        print(
-            f"Requesting portfolio optimization from Claude ({claude_model}) "
-            f"with {thinking_budget} token thinking budget and {max_tokens} total max tokens..."
-        )
-        print("This may take longer than usual due to full analysis processing...")
+        print()
+        print("=" * 80)
+        print(f"REQUESTING PORTFOLIO OPTIMIZATION FROM CLAUDE ({claude_model})")
+        print(f"Using extended thinking with {thinking_budget} token thinking budget")
+        print(f"Streaming enabled for responsive feedback during processing")
+        print("=" * 80)
+        print()
+        
         optimization_response = get_claude_portfolio_optimization(
             prompt, client, model=claude_model
         )
