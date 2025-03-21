@@ -1,5 +1,19 @@
 # Changelog
 
+## 2025-03-21: Updated Documentation for Extended Thinking and Streaming
+
+Updated all project documentation to reflect the increased thinking budget and streaming implementation
+
+### Files Changed
+- `README.md`
+- `claude_test_README.md`
+- `utils/analysis.py`
+
+### Tasks Completed
+- Updated all references to thinking budget from 16,000 to 32,000 tokens
+- Added documentation about streaming implementation for real-time feedback
+- Ensured documentation consistency across all project files
+
 ## 2025-03-21: Increased Claude thinking budget
 
 Doubled Claude's thinking budget from 16,000 to 32,000 tokens to enable deeper portfolio analysis

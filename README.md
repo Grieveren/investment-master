@@ -148,10 +148,11 @@ A Python tool for analyzing stock portfolios using financial data from SimplyWal
 - Takes longer but provides much more detailed insights
 - **Enhanced Analysis Mode**: 
   - Uses complete stock analysis files rather than extracts
-  - Leverages Claude's maximum thinking budget (16,000 tokens)
+  - Leverages Claude's maximum thinking budget (32,000 tokens)
   - Provides significantly more detailed sector analysis
   - Includes implementation considerations with tax implications
   - Offers detailed risk management assessment
+  - Uses streaming for real-time feedback during analysis
 
 ## Changelog
 
@@ -181,14 +182,16 @@ The analyzer supports two AI models:
 
 ### Anthropic Claude
 - Optional model (use `--model claude-3-7`)
-- Extended thinking capability (16K tokens of thinking)
+- Extended thinking capability (32K tokens of thinking)
 - More detailed analysis (30-40 seconds per stock)
 - Configured with temperature=1.0 (required for extended thinking)
+- Implements streaming for real-time process feedback
 - Powers the holistic portfolio optimization with enhanced features:
   - Complete analysis processing (no extraction of sections)
   - Maximum thinking budget for deeper analysis
   - Comprehensive sector and risk analysis
   - Detailed implementation guidance
+  - Streaming updates during extended thinking process
 
 ## Value Investing Criteria
 

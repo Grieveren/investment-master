@@ -45,12 +45,14 @@ The script generates several output files for analysis and debugging:
 
 ## Extended Thinking
 
-This implementation uses Claude's extended thinking feature with a large budget (16,000 tokens) to provide enhanced reasoning capabilities. This allows Claude to:
+This implementation uses Claude's extended thinking feature with a large budget (32,000 tokens) to provide enhanced reasoning capabilities. This allows Claude to:
 
 - Perform more thorough analysis of financial data
 - Compare metrics across multiple dimensions
 - Reason through complex valuation considerations
 - Provide more detailed explanations of recommendations
+
+The implementation leverages streaming for real-time feedback during the extended thinking process, providing progress updates and improving the user experience.
 
 ## Sample Data Structure
 

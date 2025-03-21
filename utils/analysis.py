@@ -88,7 +88,7 @@ def get_value_investing_signals(portfolio_data, api_data, openai_client=None, an
     logger.info(f"Starting value investing analysis using {model} model")
     
     if model.startswith("claude"):
-        thinking_budget = config["claude"].get("thinking_budget", 16000)
+        thinking_budget = config["claude"].get("thinking_budget", 32000)
         logger.info(f"Using Claude with enhanced analysis mode and {thinking_budget} token thinking budget")
         print(f"Enhanced Analysis Mode: Using Claude with {thinking_budget} token thinking budget")
         print("This will provide more comprehensive and nuanced analysis, but may take longer per company")
@@ -323,7 +323,7 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
             # Add footer with model information
             company_markdown += "---\n\n"
             if model.startswith("claude"):
-                thinking_budget = config["claude"].get("thinking_budget", 16000)
+                thinking_budget = config["claude"].get("thinking_budget", 32000)
                 company_markdown += f"This analysis was performed using SimplyWall.st financial statements data processed through Anthropic's Claude model with {thinking_budget} tokens of thinking budget. "
                 company_markdown += "The enhanced analysis includes comprehensive evaluation of all available financial data. "
             else:
@@ -441,7 +441,7 @@ def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219")
         str: Text response from Claude.
     """
     try:
-        thinking_budget = config["claude"].get("thinking_budget", 16000)
+        thinking_budget = config["claude"].get("thinking_budget", 32000)
         
         # Enhanced system prompt with detailed guidance for using extended thinking time
         system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.

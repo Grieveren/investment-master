@@ -13,7 +13,7 @@ Currently, when Claude recommends adding new positions to the portfolio (like Jo
 1. Enable Claude to make data-backed recommendations for new stock positions
 2. Maintain the value investing discipline with accurate financial metrics
 3. Ensure recommendations for both existing and new positions use the same quality of data
-4. Preserve the 16000 token thinking budget while accommodating additional data
+4. Maintain the 32000 token thinking budget while accommodating additional data
 
 ## Implementation Plan
 

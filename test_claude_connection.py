@@ -67,7 +67,7 @@ def test_prompt_creation():
     # Print prompt length and preview
     print(f"Prompt length: {len(prompt)} characters")
     print(f"Using FULL company analyses (not just extracts)")
-    print(f"Using Claude thinking budget: {config['claude'].get('thinking_budget', 16000)} tokens")
+    print(f"Using Claude thinking budget: {config['claude'].get('thinking_budget', 32000)} tokens")
     
     # Count total words in the prompt as a rough estimate of tokens
     word_count = len(prompt.split())

@@ -180,7 +180,7 @@ def test_claude_analysis(api_key=None, sample_data=None, model="claude-3-7-sonne
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            thinking={"type": "enabled", "budget_tokens": 16000},
+            thinking={"type": "enabled", "budget_tokens": 32000},
             temperature=1.0  # Must be 1.0 when thinking is enabled
         )
         
