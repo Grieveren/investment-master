@@ -316,9 +316,7 @@ Follow this format exactly as it will be parsed programmatically. Your analysis 
             # Add full AI response as a reference
             company_markdown += "## Full Analysis\n\n"
             company_markdown += "```\n"
-            company_markdown += components.get('raw_response', '')[:5000]  # Limit to first 5000 chars if too long
-            if len(components.get('raw_response', '')) > 5000:
-                company_markdown += "\n... (truncated) ..."
+            company_markdown += components.get('raw_response', '')
             company_markdown += "\n```\n\n"
             
             # Add footer with model information
