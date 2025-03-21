@@ -249,6 +249,14 @@ def create_claude_portfolio_prompt(portfolio_data, analyses):
     prompt += """
 ## Portfolio Optimization Request
 
+IMPORTANT: Only make recommendations for positions that are ALREADY in the portfolio. DO NOT suggest adding any new positions that aren't listed in the Current Positions table above.
+
+IMPORTANT: Treat all three portfolios (Work, Family, Brett) as ONE UNIFIED PORTFOLIO. When making recommendations:
+1. Consider duplicate positions across portfolios as a single consolidated position
+2. Do not distinguish which sub-portfolio a position belongs to in your recommendations
+3. Evaluate positions purely on their investment merits, not on which sub-portfolio they're in
+4. Make recommendations for the total portfolio as if it were a single unified account
+
 Based on the above data, please provide:
 
 1. **Overall Analysis**: A comprehensive analysis of the current portfolio considering diversification, sector allocation, risk profile, and alignment with value investing principles.
