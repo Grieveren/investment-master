@@ -355,7 +355,8 @@ def get_claude_portfolio_optimization(prompt, client, model="claude-3-7-sonnet-2
         output_tokens = config["portfolio"]["claude_optimization"].get("output_tokens", 4000)
         # max_tokens must be larger than thinking_budget according to Anthropic's docs
         max_tokens = thinking_budget + output_tokens
-        temperature = config["portfolio"]["claude_optimization"].get("temperature", 0.1)
+        # Temperature must be set to 1.0 when using extended thinking
+        temperature = 1.0  # Required when using extended thinking
         
         # System prompt to clarify the task
         system_prompt = """You are a financial advisor with expertise in value investing and 
@@ -417,6 +418,7 @@ each position's unique characteristics and how it fits into the overall portfoli
         
         logger.info(f"Requesting portfolio optimization from Claude ({model})...")
         logger.info(f"Using thinking budget: {thinking_budget} tokens with total max_tokens: {max_tokens} tokens")
+        logger.info(f"Temperature set to {temperature} as required for extended thinking")
         logger.debug(f"Prompt length: {len(prompt)} characters")
         print(f"Starting Claude analysis with {thinking_budget} token thinking budget...")
         print("This will take some time. Progress will be shown as Claude processes the data...")
