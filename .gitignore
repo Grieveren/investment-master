@@ -28,7 +28,8 @@ var/
 
 # Data files
 *.json
-data/
+data/raw/
+data/processed/
 !config.json
 
 # Logs
