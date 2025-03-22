@@ -1,5 +1,45 @@
 # Changelog
 
+## 2025-03-21: Updated Output Token Limits for Enhanced Analysis
+
+Improved the analysis capabilities by increasing output token limits and fixing token-related issues.
+- Increased individual company analysis output tokens from 5000 to 10000
+- Increased portfolio optimization output tokens from 4000 to 10000
+- Fixed max_tokens parameter in analyze_with_claude function to ensure it's greater than thinking_budget
+- Removed truncation limit for company analysis files to show full analysis results
+
+### Files Changed
+- `utils/analysis.py`
+- `config.json`
+
+## 2025-03-21: Portfolio Analysis Run (Anthropic Claude)
+
+Ran portfolio analysis on 11 stocks using Anthropic Claude model.
+- Date: 2025-03-21 21:05:27
+- Duration: 829.8 seconds
+- Output: data/processed/portfolio_analysis_claude.md
+- Company analyses: data/processed/companies/claude/
+
+### Files Changed
+- `data/processed/portfolio_analysis_claude.md`
+- `data/processed/companies/claude/*.md`
+
+
+
+## 2025-03-21: Portfolio Analysis Run (Anthropic Claude)
+
+Ran portfolio analysis on 11 stocks using Anthropic Claude model.
+- Date: 2025-03-21 20:13:23
+- Duration: 844.6 seconds
+- Output: data/processed/portfolio_analysis_claude.md
+- Company analyses: data/processed/companies/claude/
+
+### Files Changed
+- `data/processed/portfolio_analysis_claude.md`
+- `data/processed/companies/claude/*.md`
+
+
+
 ## 2025-03-21: Implemented Streaming for Individual Company Analysis
 
 - Added streaming implementation with visual progress indicators for individual stock analysis
