@@ -5,8 +5,8 @@ API module for interacting with the SimplyWall.st API.
 import time
 import random
 import requests
-from utils.logger import logger
-from utils.config import config
+from src.core.logger import logger
+from src.core.config import config
 
 def fetch_company_data(ticker, exchange, api_token, max_retries=None):
     """Fetch company data from SimplyWall.st GraphQL API with retry logic.
@@ -136,7 +136,7 @@ def fetch_all_companies(stocks, api_token):
     Returns:
         dict: Dictionary mapping stock names to API response data.
     """
-    from utils.portfolio import get_stock_ticker_and_exchange
+    from src.core.portfolio import get_stock_ticker_and_exchange
     
     api_data = {}
     

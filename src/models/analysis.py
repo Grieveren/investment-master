@@ -8,9 +8,9 @@ import datetime
 import time
 import re
 from openai import OpenAI
-from utils.logger import logger
-from utils.config import config
-from utils.file_operations import save_markdown, save_json_data
+from src.core.logger import logger
+from src.core.config import config
+from src.core.file_operations import save_markdown, save_json_data
 
 # Try to import Anthropic, but don't fail if not available
 try:
@@ -19,7 +19,7 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
-from utils.portfolio import get_stock_ticker_and_exchange
+from src.core.portfolio import get_stock_ticker_and_exchange
 
 def create_openai_client(api_key):
     """Create an OpenAI client.

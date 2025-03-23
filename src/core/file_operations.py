@@ -4,7 +4,7 @@ File operations module for saving and loading data.
 
 import os
 import json
-from utils.logger import logger
+from src.core.logger import logger
 
 def save_json_data(data, filepath):
     """Save data to a JSON file.

@@ -32,10 +32,11 @@ import traceback
 from dotenv import load_dotenv
 import anthropic
 
-from utils.logger import logger
-from utils.config import config
-from utils.portfolio_optimizer import parse_portfolio_csv
-from utils.file_operations import save_markdown
+# Update imports to use the new module structure
+from src.core.logger import logger
+from src.core.config import config
+from src.core.portfolio_optimizer import parse_portfolio_csv
+from src.core.file_operations import save_markdown
 
 
 def create_anthropic_client(api_key):

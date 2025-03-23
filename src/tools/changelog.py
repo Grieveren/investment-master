@@ -7,7 +7,7 @@ to track modifications made to the project.
 
 import os
 import datetime
-from utils.logger import logger
+from src.core.logger import logger
 
 def add_changelog_entry(title, description, files_changed=None, tasks_completed=None, next_steps=None):
     """Add a new entry to the changelog.

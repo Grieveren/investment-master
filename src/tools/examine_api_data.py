@@ -1,6 +1,6 @@
 import json
 import os
-from utils.config import config
+from src.core.config import config
 
 def main():
     """Examine the API data structure to identify unused fields."""

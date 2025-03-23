@@ -40,14 +40,16 @@ import argparse
 import datetime
 import time
 from dotenv import load_dotenv
-from utils.logger import logger
-from utils.config import config
-from utils.portfolio import parse_portfolio
-from utils.api import fetch_all_companies
-from utils.analysis import create_openai_client, create_anthropic_client, get_value_investing_signals
-from utils.file_operations import save_json_data, save_markdown
-from utils.changelog import add_analysis_run_to_changelog, add_changelog_entry
-from utils.portfolio_optimizer import parse_portfolio_csv, map_portfolio_to_analysis, optimize_portfolio, format_optimization_to_markdown
+
+# Update imports to use the new module structure
+from src.core.logger import logger
+from src.core.config import config
+from src.core.portfolio import parse_portfolio
+from src.tools.api import fetch_all_companies
+from src.models.analysis import create_openai_client, create_anthropic_client, get_value_investing_signals
+from src.core.file_operations import save_json_data, save_markdown
+from src.tools.changelog import add_analysis_run_to_changelog, add_changelog_entry
+from src.core.portfolio_optimizer import parse_portfolio_csv, map_portfolio_to_analysis, optimize_portfolio, format_optimization_to_markdown
 
 def ensure_directories_exist():
     """Ensure all required directories exist."""

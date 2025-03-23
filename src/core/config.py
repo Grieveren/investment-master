@@ -4,7 +4,7 @@ Configuration module for the portfolio analyzer.
 
 import os
 import json
-from utils.logger import logger
+from src.core.logger import logger
 
 def load_config(config_file='config.json'):
     """Load configuration from a JSON file.

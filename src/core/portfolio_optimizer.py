@@ -14,10 +14,10 @@ import csv
 import json
 import re
 from datetime import datetime
-from utils.logger import logger
-from utils.config import config
-from utils.file_operations import save_markdown
-from utils.portfolio import get_stock_ticker_and_exchange
+from src.core.logger import logger
+from src.core.config import config
+from src.core.file_operations import save_markdown
+from src.core.portfolio import get_stock_ticker_and_exchange
 
 def parse_portfolio_csv(csv_path):
     """Parse portfolio data from a bank CSV export.

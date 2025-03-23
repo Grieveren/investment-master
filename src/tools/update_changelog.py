@@ -8,7 +8,7 @@ This helps track progress and makes it easier to pick up where you left off.
 
 import sys
 import argparse
-from utils.changelog import add_changelog_entry
+from src.tools.changelog import add_changelog_entry
 
 def main():
     """Main function to update the changelog."""
