@@ -2,8 +2,8 @@
 Portfolio data module for the portfolio analyzer.
 """
 
-from utils.logger import logger
-from utils.config import config
+from src.core.logger import logger
+from src.core.config import config
 
 def parse_portfolio(portfolio_file=None):
     """Parse the portfolio data from a markdown file.
@@ -54,6 +54,10 @@ def get_stock_ticker_and_exchange(stock_name):
     Returns:
         dict: Dictionary with ticker and exchange, or None if not found.
     """
+    # Stock mapping dictionary that maps company names to their ticker symbols and exchanges
+    # Multiple entries are provided for companies that may be referenced in different ways
+    # For example, TSM (Taiwan Semiconductor) has multiple mappings to handle various
+    # ways it might appear in portfolio data (ticker symbol, full name, abbreviated name)
     stock_map = {
         "Berkshire Hathaway B": {"ticker": "BRK.B", "exchange": "NYSE"},
         "Allianz SE": {"ticker": "ALV", "exchange": "XTRA"},
@@ -65,7 +69,12 @@ def get_stock_ticker_and_exchange(stock_name):
         "Advanced Micro Devices": {"ticker": "AMD", "exchange": "NasdaqGS"},
         "Nutanix": {"ticker": "NTNX", "exchange": "NasdaqGS"},
         "ASML Holding": {"ticker": "ASML", "exchange": "NasdaqGS"},
-        "Taiwan Semiconductor ADR": {"ticker": "TSM", "exchange": "NYSE"}
+        "Taiwan Semiconductor ADR": {"ticker": "TSM", "exchange": "NYSE"},
+        "Taiwan Semiconductor": {"ticker": "TSM", "exchange": "NYSE"},
+        "Taiwan Semiconductor Manufacturing Company": {"ticker": "TSM", "exchange": "NYSE"},
+        "Taiwan Semiconductor Manufacturing": {"ticker": "TSM", "exchange": "NYSE"},
+        "TSMC": {"ticker": "TSM", "exchange": "NYSE"},
+        "TSM": {"ticker": "TSM", "exchange": "NYSE"}
     }
     
     stock_info = stock_map.get(stock_name)
