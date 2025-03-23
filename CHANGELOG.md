@@ -1,5 +1,12 @@
 # Changelog
 
+## 2025-03-23: Extended Ticker Mapping and Added Regression Tests
+
+Extended the ticker mapping system:
+- Added direct ticker symbol lookups for all supported companies 
+- Created regression tests to prevent future mapping issues
+- Improved modularity with comprehensive test coverage
+
 ## 2025-03-23: Fixed TSM Ticker Mapping
 
 Fixed an issue with Taiwan Semiconductor (TSM) ticker not being properly recognized in the portfolio analyzer.
