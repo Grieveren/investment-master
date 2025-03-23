@@ -59,6 +59,7 @@ def get_stock_ticker_and_exchange(stock_name):
     # For example, TSM (Taiwan Semiconductor) has multiple mappings to handle various
     # ways it might appear in portfolio data (ticker symbol, full name, abbreviated name)
     stock_map = {
+        # Company names
         "Berkshire Hathaway B": {"ticker": "BRK.B", "exchange": "NYSE"},
         "Allianz SE": {"ticker": "ALV", "exchange": "XTRA"},
         "GitLab Inc.": {"ticker": "GTLB", "exchange": "NasdaqGS"},
@@ -74,6 +75,18 @@ def get_stock_ticker_and_exchange(stock_name):
         "Taiwan Semiconductor Manufacturing Company": {"ticker": "TSM", "exchange": "NYSE"},
         "Taiwan Semiconductor Manufacturing": {"ticker": "TSM", "exchange": "NYSE"},
         "TSMC": {"ticker": "TSM", "exchange": "NYSE"},
+        
+        # Direct ticker mappings for all companies
+        "MSFT": {"ticker": "MSFT", "exchange": "NasdaqGS"},
+        "NVDA": {"ticker": "NVDA", "exchange": "NasdaqGS"},
+        "GOOG": {"ticker": "GOOG", "exchange": "NasdaqGS"},
+        "GTLB": {"ticker": "GTLB", "exchange": "NasdaqGS"},
+        "ALV": {"ticker": "ALV", "exchange": "XTRA"},
+        "AMD": {"ticker": "AMD", "exchange": "NasdaqGS"},
+        "BRK.B": {"ticker": "BRK.B", "exchange": "NYSE"},
+        "ASML": {"ticker": "ASML", "exchange": "NasdaqGS"},
+        "CRWD": {"ticker": "CRWD", "exchange": "NasdaqGS"},
+        "NTNX": {"ticker": "NTNX", "exchange": "NasdaqGS"},
         "TSM": {"ticker": "TSM", "exchange": "NYSE"}
     }
     
