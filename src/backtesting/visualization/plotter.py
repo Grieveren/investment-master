@@ -8,8 +8,13 @@ and comparative benchmarks.
 
 import logging
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import os
 import datetime
-from typing import Dict, List, Optional, Union
+import pytz
+from typing import Dict, List, Tuple, Optional, Union
 
 # This is a placeholder - you'll need to install matplotlib
 # pip install matplotlib
@@ -23,143 +28,283 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class BacktestPlotter:
-    """Generates plots and visualizations from backtest results."""
+    """Plotter for backtest results visualization."""
     
-    def __init__(self, output_dir: str = 'data/backtesting/charts'):
+    def __init__(
+        self,
+        results: pd.DataFrame,
+        benchmark_data: Optional[pd.DataFrame] = None,
+        start_date: Optional[datetime.date] = None,
+        end_date: Optional[datetime.date] = None
+    ):
         """Initialize the backtest plotter.
         
         Args:
-            output_dir: Directory to save plots to
+            results: DataFrame with backtest results
+            benchmark_data: Optional DataFrame with benchmark data
+            start_date: Start date of the backtest
+            end_date: End date of the backtest
         """
-        self.output_dir = output_dir
+        # Convert index to UTC timezone if timezone-aware
+        if isinstance(results.index, pd.DatetimeIndex):
+            if results.index.tz is not None:
+                self.results = results.tz_convert('UTC')
+            else:
+                self.results = results.tz_localize('UTC')
+        else:
+            self.results = results
+            
+        # Convert benchmark data to UTC timezone if timezone-aware
+        if benchmark_data is not None and isinstance(benchmark_data.index, pd.DatetimeIndex):
+            if benchmark_data.index.tz is not None:
+                self.benchmark_data = benchmark_data.tz_convert('UTC')
+            else:
+                self.benchmark_data = benchmark_data.tz_localize('UTC')
+        else:
+            self.benchmark_data = benchmark_data
+            
+        self.start_date = start_date
+        self.end_date = end_date
         
-        if not MATPLOTLIB_AVAILABLE:
-            logger.warning("matplotlib package is not installed. Please install with 'pip install matplotlib'")
+        # Ensure output dirs exist
+        os.makedirs('data/backtesting', exist_ok=True)
+        
+        logger.info("Initialized BacktestPlotter")
     
-    def plot_portfolio_performance(
-        self,
-        nav_history: pd.DataFrame,
-        benchmark_history: Optional[pd.DataFrame] = None,
-        title: str = 'Portfolio Performance',
-        filename: str = 'portfolio_performance.png'
-    ) -> bool:
-        """Plot portfolio performance over time.
+    def plot_portfolio_performance(self, output_path: str = 'data/backtesting/performance.png') -> bool:
+        """Plot portfolio performance compared to benchmark.
         
         Args:
-            nav_history: DataFrame with 'date' and 'nav' columns
-            benchmark_history: Optional DataFrame with benchmark data
-            title: Plot title
-            filename: Output filename
+            output_path: Path to save the plot
             
         Returns:
-            True if the plot was generated successfully
+            Whether the plot was successfully created
         """
-        if not MATPLOTLIB_AVAILABLE:
-            logger.error("Cannot generate plot: matplotlib not installed")
-            return False
-            
         try:
-            plt.figure(figsize=(12, 6))
+            if self.results is None or self.results.empty:
+                logger.error("No results data available for plotting")
+                return False
+                
+            # Create the figure
+            plt.figure(figsize=(12, 8))
             
-            # Plot portfolio NAV
-            plt.plot(nav_history['date'], nav_history['nav'], label='Portfolio')
+            # Plot portfolio value
+            ax = plt.subplot(2, 1, 1)
+            self.results['Portfolio Value'].plot(ax=ax, label='Portfolio Value', color='blue')
             
-            # Plot benchmark if provided
-            if benchmark_history is not None and not benchmark_history.empty:
-                # Normalize benchmark to same starting value as portfolio
-                norm_factor = nav_history['nav'].iloc[0] / benchmark_history['Close'].iloc[0]
-                plt.plot(
-                    benchmark_history.index, 
-                    benchmark_history['Close'] * norm_factor,
-                    label='Benchmark',
-                    alpha=0.7
-                )
+            # Add cash component if available
+            if 'Cash' in self.results.columns:
+                self.results['Cash'].plot(ax=ax, label='Cash', color='green', alpha=0.5)
             
-            plt.title(title)
+            # Format the plot
+            plt.title('Portfolio Performance', fontsize=16)
             plt.xlabel('Date')
-            plt.ylabel('Value')
+            plt.ylabel('Value ($)')
             plt.grid(True, alpha=0.3)
             plt.legend()
             
             # Format x-axis dates
             plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-            plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=3))
             plt.gcf().autofmt_xdate()
             
-            # Save the plot
+            # Plot relative performance vs benchmark
+            ax2 = plt.subplot(2, 1, 2)
+            
+            # Normalize portfolio value to start at 100
+            norm_portfolio = 100 * self.results['Portfolio Value'] / self.results['Portfolio Value'].iloc[0]
+            norm_portfolio.plot(ax=ax2, label='Portfolio', color='blue')
+            
+            # Add benchmark if available
+            if self.benchmark_data is not None and not self.benchmark_data.empty:
+                # Ensure both indices are timezone-aware and in UTC
+                benchmark_index = self.benchmark_data.index
+                results_index = self.results.index
+                
+                if not isinstance(benchmark_index, pd.DatetimeIndex):
+                    benchmark_index = pd.to_datetime(benchmark_index)
+                    self.benchmark_data.index = benchmark_index
+                
+                if not isinstance(results_index, pd.DatetimeIndex):
+                    results_index = pd.to_datetime(results_index)
+                    self.results.index = results_index
+                
+                # Convert both to UTC if they have timezones
+                if benchmark_index.tz is not None:
+                    self.benchmark_data = self.benchmark_data.tz_convert('UTC')
+                else:
+                    self.benchmark_data = self.benchmark_data.tz_localize('UTC')
+                    
+                if results_index.tz is not None:
+                    self.results = self.results.tz_convert('UTC')
+                else:
+                    self.results = self.results.tz_localize('UTC')
+                
+                # Now both indices are in UTC, we can safely align them
+                aligned_benchmark = self.benchmark_data.reindex(
+                    self.results.index,
+                    method='ffill'
+                )
+                
+                if not aligned_benchmark.empty:
+                    # Normalize benchmark to start at 100
+                    norm_benchmark = 100 * aligned_benchmark['Close'] / aligned_benchmark['Close'].iloc[0]
+                    norm_benchmark.plot(ax=ax2, label='Benchmark', color='red')
+            
+            # Format the plot
+            plt.title('Relative Performance (Normalized)', fontsize=16)
+            plt.xlabel('Date')
+            plt.ylabel('Value (Normalized to 100)')
+            plt.grid(True, alpha=0.3)
+            plt.legend()
+            
+            # Format x-axis dates
+            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+            plt.gcf().autofmt_xdate()
+            
+            # Tight layout to avoid overlapping
             plt.tight_layout()
-            plt.savefig(f"{self.output_dir}/{filename}")
+            
+            # Save the plot
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
             
-            logger.info(f"Generated portfolio performance plot: {filename}")
+            logger.info(f"Portfolio performance plot saved to {output_path}")
             return True
             
         except Exception as e:
-            logger.error(f"Error generating portfolio performance plot: {e}")
+            logger.error(f"Error creating portfolio performance plot: {e}")
             return False
     
-    def plot_drawdown(
-        self,
-        nav_history: pd.DataFrame,
-        title: str = 'Portfolio Drawdown',
-        filename: str = 'portfolio_drawdown.png'
-    ) -> bool:
+    def plot_drawdown(self, output_path: str = 'data/backtesting/drawdown.png') -> bool:
         """Plot portfolio drawdown over time.
         
         Args:
-            nav_history: DataFrame with 'date' and 'nav' columns
-            title: Plot title
-            filename: Output filename
+            output_path: Path to save the plot
             
         Returns:
-            True if the plot was generated successfully
+            Whether the plot was successfully created
         """
-        if not MATPLOTLIB_AVAILABLE:
-            logger.error("Cannot generate plot: matplotlib not installed")
-            return False
-            
         try:
-            # Calculate drawdown
-            nav_df = nav_history.copy()
-            nav_df['peak'] = nav_df['nav'].cummax()
-            nav_df['drawdown'] = (nav_df['nav'] - nav_df['peak']) / nav_df['peak'] * 100  # As percentage
+            if self.results is None or self.results.empty:
+                logger.error("No results data available for plotting drawdown")
+                return False
             
+            # Calculate drawdown
+            portfolio_value = self.results['Portfolio Value']
+            peak = portfolio_value.cummax()
+            drawdown = (portfolio_value - peak) / peak * 100  # Convert to percentage
+            
+            # Create the figure
             plt.figure(figsize=(12, 6))
             
             # Plot drawdown
-            plt.fill_between(
-                nav_df['date'],
-                nav_df['drawdown'],
-                0,
-                color='red',
-                alpha=0.3,
-                label='Drawdown'
-            )
-            plt.plot(nav_df['date'], nav_df['drawdown'], color='red', alpha=0.5)
+            drawdown.plot(color='red', alpha=0.7, linewidth=1.5)
             
-            plt.title(title)
+            # Add horizontal lines at -5%, -10%, -20%
+            plt.axhline(y=-5, color='orange', linestyle='--', alpha=0.5)
+            plt.axhline(y=-10, color='orange', linestyle='--', alpha=0.5)
+            plt.axhline(y=-20, color='red', linestyle='--', alpha=0.5)
+            
+            # Format the plot
+            plt.title('Portfolio Drawdown', fontsize=16)
             plt.xlabel('Date')
             plt.ylabel('Drawdown (%)')
             plt.grid(True, alpha=0.3)
             
+            # Y-axis should be inverted for drawdown
+            plt.gca().invert_yaxis()
+            
             # Format x-axis dates
             plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-            plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=3))
             plt.gcf().autofmt_xdate()
-            
-            # Format y-axis as percentage
-            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.1f}%'))
             
             # Save the plot
             plt.tight_layout()
-            plt.savefig(f"{self.output_dir}/{filename}")
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
             
-            logger.info(f"Generated drawdown plot: {filename}")
+            logger.info(f"Drawdown plot saved to {output_path}")
             return True
             
         except Exception as e:
-            logger.error(f"Error generating drawdown plot: {e}")
+            logger.error(f"Error creating drawdown plot: {e}")
+            return False
+    
+    def plot_monthly_returns(self, output_path: str = 'data/backtesting/monthly_returns.png') -> bool:
+        """Plot monthly returns as a heatmap.
+        
+        Args:
+            output_path: Path to save the plot
+            
+        Returns:
+            Whether the plot was successfully created
+        """
+        try:
+            if self.results is None or self.results.empty:
+                logger.error("No results data available for plotting monthly returns")
+                return False
+            
+            # Calculate daily returns
+            portfolio_value = self.results['Portfolio Value']
+            daily_returns = portfolio_value.pct_change().fillna(0)
+            
+            # Ensure the index is a DatetimeIndex
+            if not isinstance(daily_returns.index, pd.DatetimeIndex):
+                daily_returns.index = pd.to_datetime(daily_returns.index)
+            
+            # Calculate monthly returns
+            monthly_returns = pd.DataFrame()
+            monthly_returns['Year'] = daily_returns.index.year
+            monthly_returns['Month'] = daily_returns.index.month
+            monthly_returns['Return'] = daily_returns.values
+            
+            # Calculate returns by month/year
+            monthly_returns = monthly_returns.groupby(['Year', 'Month']).apply(
+                lambda x: (1 + x['Return']).prod() - 1).unstack('Month')
+            
+            # Create figure
+            plt.figure(figsize=(12, 8))
+            
+            # Plot heatmap
+            plt.pcolormesh(monthly_returns.columns, monthly_returns.index, 
+                          monthly_returns.values, cmap='RdYlGn', vmin=-0.1, vmax=0.1)
+            
+            # Add colorbar
+            cbar = plt.colorbar()
+            cbar.set_label('Monthly Return')
+            
+            # Format the plot
+            plt.title('Monthly Returns', fontsize=16)
+            plt.xlabel('Month')
+            plt.ylabel('Year')
+            
+            # Set x ticks to month names
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            plt.xticks(range(1, 13), month_names)
+            
+            # Add text annotations with actual values
+            for i in range(len(monthly_returns.index)):
+                for j in range(len(monthly_returns.columns)):
+                    try:
+                        value = monthly_returns.iloc[i, j]
+                        if not pd.isna(value):  # Skip NaN values
+                            color = 'white' if abs(value) > 0.05 else 'black'
+                            plt.text(j + 0.5, i + 0.5, f'{value:.1%}', 
+                                    ha='center', va='center', color=color)
+                    except IndexError:
+                        pass
+            
+            # Save the plot
+            plt.tight_layout()
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            logger.info(f"Monthly returns plot saved to {output_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating monthly returns plot: {e}")
             return False
     
     def plot_transactions(
