@@ -5,26 +5,19 @@ This module contains functions for analyzing financial data
 using Anthropic's Claude models.
 """
 
-import time
-from src.core.logger import logger
-from src.core.config import config
+import time as _time
+from src.core.logger import logger as _logger
+from src.core.config import config as _config
 
-def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219"):
-    """Use Anthropic's Claude model to analyze financial data.
+def _get_system_prompt():
+    """Get the system prompt for Claude analysis.
     
-    Args:
-        user_prompt (str): The prompt to send to Claude.
-        client (Anthropic): Anthropic client instance.
-        model (str, optional): Claude model to use. Defaults to "claude-3-7-sonnet-20250219".
-        
+    This function is private and only used within this module.
+    
     Returns:
-        str: Text response from Claude.
+        str: System prompt for Claude
     """
-    try:
-        thinking_budget = config["claude"].get("thinking_budget", 32000)
-        
-        # Enhanced system prompt with detailed guidance for using extended thinking time
-        system_prompt = """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
+    return """You are a value investing expert with deep knowledge of financial analysis, following principles of Warren Buffett and Benjamin Graham.
 
 You have been given extended thinking time to perform an exceptionally thorough analysis of a company. Use this time to:
 
@@ -84,14 +77,31 @@ IMPORTANT: Always include the Current Price in your Price Analysis section, exac
 
 This format will be used to guide investment decisions, so be thorough and objective. This is an enhanced analysis using comprehensive data, so provide detailed insights beyond a typical stock report.
 """
+
+def analyze_with_claude(user_prompt, client, model="claude-3-7-sonnet-20250219"):
+    """Use Anthropic's Claude model to analyze financial data.
+    
+    Args:
+        user_prompt (str): The prompt to send to Claude.
+        client (Anthropic): Anthropic client instance.
+        model (str, optional): Claude model to use. Defaults to "claude-3-7-sonnet-20250219".
         
-        logger.info(f"Requesting detailed company analysis from Claude ({model}) with {thinking_budget} token thinking budget...")
+    Returns:
+        str: Text response from Claude.
+    """
+    try:
+        thinking_budget = _config["claude"].get("thinking_budget", 32000)
+        
+        # Get system prompt from private function
+        system_prompt = _get_system_prompt()
+        
+        _logger.info(f"Requesting detailed company analysis from Claude ({model}) with {thinking_budget} token thinking budget...")
         print(f"Starting analysis with {thinking_budget} token thinking budget...")
         print("This will take some time. Progress will be shown as Claude processes the data...")
         
-        start_time = time.time()
+        start_time = _time.time()
         
-        # Variables to track streaming progress
+        # Variables to track streaming progress - scoped only to this function
         full_response = ""
         current_thinking = ""
         current_text = ""
@@ -99,7 +109,7 @@ This format will be used to guide investment decisions, so be thorough and objec
         text_in_progress = False
         thinking_chunks = 0
         text_chunks = 0
-        last_progress_time = time.time()
+        last_progress_time = _time.time()
         progress_interval = 5  # Show progress every 5 seconds
         
         # Use streaming to get the response
@@ -118,7 +128,7 @@ This format will be used to guide investment decisions, so be thorough and objec
             
             # Process the streaming events
             for event in stream:
-                current_time = time.time()
+                current_time = _time.time()
                 
                 # Handle message start
                 if event.type == "message_start":
@@ -163,27 +173,27 @@ This format will be used to guide investment decisions, so be thorough and objec
                 elif event.type == "content_block_stop":
                     if thinking_in_progress:
                         thinking_in_progress = False
-                        logger.info(f"Thinking complete: {len(current_thinking)} characters in {thinking_chunks} chunks")
+                        _logger.info(f"Thinking complete: {len(current_thinking)} characters in {thinking_chunks} chunks")
                     elif text_in_progress:
                         text_in_progress = False
-                        logger.info(f"Text complete: {len(current_text)} characters in {text_chunks} chunks")
+                        _logger.info(f"Text complete: {len(current_text)} characters in {text_chunks} chunks")
                 
                 # Handle message delta
                 elif event.type == "message_delta":
                     if event.delta.stop_reason:
-                        logger.info(f"Message stopped with reason: {event.delta.stop_reason}")
+                        _logger.info(f"Message stopped with reason: {event.delta.stop_reason}")
                 
                 # Handle message stop (end of stream)
                 elif event.type == "message_stop":
                     full_response = current_text
-                    logger.info("Streaming complete")
+                    _logger.info("Streaming complete")
         
-        elapsed_time = time.time() - start_time
-        logger.info(f"Claude company analysis completed in {elapsed_time:.1f}s")
+        elapsed_time = _time.time() - start_time
+        _logger.info(f"Claude company analysis completed in {elapsed_time:.1f}s")
         print(f"\nCompany analysis complete! (took {elapsed_time:.1f} seconds)")
         
         return full_response
         
     except Exception as e:
-        logger.error(f"Error calling Claude API: {e}")
+        _logger.error(f"Error calling Claude API: {e}")
         return f"Error: {e}" 

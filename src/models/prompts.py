@@ -4,8 +4,169 @@ Prompting module for financial analysis.
 This module contains functions for building and processing prompts for financial analysis.
 """
 
-import re
-from src.core.logger import logger
+import re as _re
+from src.core.logger import logger as _logger
+
+def _extract_current_price(statements, ticker):
+    """Extract the current stock price from financial statements.
+    
+    This function implements a multi-step strategy to find the most accurate
+    price information available in the statements.
+    
+    Args:
+        statements (list): List of financial statement dictionaries
+        ticker (str): Stock ticker symbol
+        
+    Returns:
+        tuple: (current_price, currency) where current_price is float or None
+    """
+    current_price = None
+    currency = 'USD'  # Default currency
+    
+    # PRICE EXTRACTION STRATEGY:
+    # 1. First look for price in IsUndervaluedBasedOnDCF statement (most reliable source)
+    # 2. If not found, try direct price fields being selective to avoid confusing metrics 
+    # 3. If still not found, check various patterns in descriptions
+    
+    # First look for price in IsUndervaluedBasedOnDCF statement (most reliable source)
+    for statement in statements:
+        if statement.get('name') == 'IsUndervaluedBasedOnDCF':
+            description = statement.get('description', '')
+            # Extract the price from ticker with price in parentheses - handles both $ and € symbols
+            # E.g., "BRK.B ($495.62)" or "ALV (€343.2)"
+            price_match = _re.search(r'[\u20AC$€]([0-9.,]+)', description)
+            if price_match:
+                try:
+                    # Handle European number format (replace comma with period)
+                    price_str = price_match.group(1).replace(',', '.')
+                    current_price = float(price_str)
+                    # Found the most reliable price, no need to look further
+                    break
+                except (ValueError, TypeError):
+                    pass
+    
+    # If still no price, try other methods
+    if current_price is None:
+        # Look for other price-related statements
+        for statement in statements:
+            stmt_name = statement.get('name', '').lower()
+            stmt_area = statement.get('area', '').lower()
+            description = statement.get('description', '').lower()
+            value = statement.get('value')
+            
+            # Be very selective about which statements we use for price
+            # Avoid statements with PE ratio or other valuation multiples
+            if ('current price' in stmt_name.lower() or 'share price' in stmt_name.lower()) and 'ratio' not in stmt_name.lower():
+                if value is not None and isinstance(value, (int, float)) or (isinstance(value, str) and value.replace('.', '').isdigit()):
+                    try:
+                        current_price = float(value)
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Try to find currency
+            if 'currency' in stmt_name or 'currency' in description:
+                if value and isinstance(value, str):
+                    currency = value
+    
+    # If still no price, check descriptions
+    if current_price is None:
+        # Check statement descriptions for price mentions
+        for statement in statements:
+            description = statement.get('description', '')
+            
+            # First try to find ticker with price in parentheses format: "BRK.B ($495.62)"
+            ticker_price_match = _re.search(r'{}?\s*\(\$([0-9,.]+)\)'.format(_re.escape(ticker)), description)
+            if ticker_price_match:
+                try:
+                    price_str = ticker_price_match.group(1).replace(',', '')
+                    current_price = float(price_str)
+                    break
+                except (ValueError, TypeError):
+                    pass
+            
+            # Then try other common price formats
+            if 'current price' in description.lower() or 'share price' in description.lower() or 'trading at' in description.lower():
+                # Try to extract price from description text
+                price_match = _re.search(r'(?:price|value|trading at)[^\d]*?\$([0-9,.]+)', description.lower())
+                if price_match:
+                    try:
+                        price_str = price_match.group(1).replace(',', '')
+                        current_price = float(price_str)
+                        break
+                    except (ValueError, TypeError):
+                        pass
+    
+    return current_price, currency
+
+def _extract_market_cap(statements):
+    """Extract market capitalization from financial statements.
+    
+    Args:
+        statements (list): List of financial statement dictionaries
+        
+    Returns:
+        float or None: Market capitalization if found, else None
+    """
+    # Look for market cap in statements
+    for statement in statements:
+        stmt_name = statement.get('name', '').lower()
+        if 'marketcap' in stmt_name.replace(' ', ''):
+            return statement.get('value')
+    return None
+
+def _format_market_cap(market_cap):
+    """Format market cap value for readability.
+    
+    Args:
+        market_cap: Raw market cap value
+        
+    Returns:
+        str: Formatted market cap string
+    """
+    market_cap_formatted = "Unknown"
+    if market_cap:
+        try:
+            market_cap_float = float(market_cap)
+            if market_cap_float >= 1000000000:
+                market_cap_formatted = f"${market_cap_float / 1000000000:.2f} billion"
+            else:
+                market_cap_formatted = f"${market_cap_float / 1000000:.2f} million"
+        except (ValueError, TypeError):
+            market_cap_formatted = str(market_cap)
+    return market_cap_formatted
+
+def _organize_statements_by_area(statements):
+    """Group statements by their area for better organization.
+    
+    Args:
+        statements (list): List of financial statement dictionaries
+        
+    Returns:
+        dict: Dictionary of statements grouped by area
+    """
+    # Define the areas and create empty lists for each
+    areas = [
+        "VALUE", "HEALTH", "PERFORMANCE", "GROWTH", 
+        "DIVIDENDS", "RISK", "MANAGEMENT", "MARKET",
+        "BANK_HEALTH", "BANK_DIVIDENDS", "FUTURE", "PAST",
+        "REWARDS", "RISKS", "MISC"
+    ]
+    
+    area_statements = {area: [] for area in areas}
+    
+    # Distribute all statements to their respective areas
+    for statement in statements:
+        area = statement.get('area', '').upper()
+        if area:
+            # If this area exists in our mapping, add the statement
+            if area in area_statements:
+                area_statements[area].append(statement)
+            else:
+                # For any unknown areas, put in MISC
+                area_statements["MISC"].append(statement)
+                
+    return area_statements, areas
 
 def build_analysis_prompt(company_data):
     """Build a comprehensive analysis prompt based on the company data.
@@ -43,125 +204,16 @@ def build_analysis_prompt(company_data):
         if 'exchangeSymbol' in company_obj:
             exchange = company_obj['exchangeSymbol']
     
-    # Extract key information - CURRENT PRICE and MARKET CAP are priorities
-    current_price = None
-    market_cap = None
-    currency = 'USD'  # Default currency
+    # Extract key information using helper functions
+    current_price, currency = _extract_current_price(statements, ticker)
+    market_cap = _extract_market_cap(statements)
     
-    # PRICE EXTRACTION STRATEGY:
-    # 1. First look for price in IsUndervaluedBasedOnDCF statement (most reliable source)
-    # 2. If not found, try direct price fields being selective to avoid confusing metrics 
-    # 3. If still not found, check various patterns in descriptions
-    # This prioritization ensures we get the actual trading price, not P/E ratios or other metrics
-    
-    # First look for price in IsUndervaluedBasedOnDCF statement (most reliable source)
-    for statement in statements:
-        if statement.get('name') == 'IsUndervaluedBasedOnDCF':
-            description = statement.get('description', '')
-            # Extract the price from ticker with price in parentheses - handles both $ and € symbols
-            # E.g., "BRK.B ($495.62)" or "ALV (€343.2)"
-            price_match = re.search(r'[\u20AC$€]([0-9.,]+)', description)
-            if price_match:
-                try:
-                    # Handle European number format (replace comma with period)
-                    price_str = price_match.group(1).replace(',', '.')
-                    current_price = float(price_str)
-                    # Found the most reliable price, no need to look further
-                    break
-                except (ValueError, TypeError):
-                    pass
-    
-    # If still no price, try other methods
-    if current_price is None:
-        # Look for other price-related statements
-        for statement in statements:
-            stmt_name = statement.get('name', '').lower()
-            stmt_area = statement.get('area', '').lower()
-            description = statement.get('description', '').lower()
-            value = statement.get('value')
-            
-            # Be very selective about which statements we use for price
-            # Avoid statements with PE ratio or other valuation multiples
-            if ('current price' in stmt_name.lower() or 'share price' in stmt_name.lower()) and 'ratio' not in stmt_name.lower():
-                if value is not None and isinstance(value, (int, float)) or (isinstance(value, str) and value.replace('.', '').isdigit()):
-                    try:
-                        current_price = float(value)
-                        break
-                    except (ValueError, TypeError):
-                        pass
-            
-            # Look for market cap
-            if 'marketcap' in stmt_name.replace(' ', ''):
-                market_cap = value
-            
-            # Try to find currency
-            if 'currency' in stmt_name or 'currency' in description:
-                if value and isinstance(value, str):
-                    currency = value
-    
-    # If still no price, check descriptions
-    if current_price is None:
-        # Check statement descriptions for price mentions
-        for statement in statements:
-            description = statement.get('description', '')
-            
-            # First try to find ticker with price in parentheses format: "BRK.B ($495.62)"
-            ticker_price_match = re.search(r'{}?\s*\(\$([0-9,.]+)\)'.format(re.escape(ticker)), description)
-            if ticker_price_match:
-                try:
-                    price_str = ticker_price_match.group(1).replace(',', '')
-                    current_price = float(price_str)
-                    break
-                except (ValueError, TypeError):
-                    pass
-            
-            # Then try other common price formats
-            if 'current price' in description.lower() or 'share price' in description.lower() or 'trading at' in description.lower():
-                # Try to extract price from description text
-                price_match = re.search(r'(?:price|value|trading at)[^\d]*?\$([0-9,.]+)', description.lower())
-                if price_match:
-                    try:
-                        price_str = price_match.group(1).replace(',', '')
-                        current_price = float(price_str)
-                        break
-                    except (ValueError, TypeError):
-                        pass
-    
-    # Format price and market cap for readability
+    # Format metrics for readability
     current_price_formatted = f"${current_price:.2f}" if current_price is not None else "Not available in API data"
+    market_cap_formatted = _format_market_cap(market_cap)
     
-    market_cap_formatted = "Unknown"
-    if market_cap:
-        try:
-            market_cap_float = float(market_cap)
-            if market_cap_float >= 1000000000:
-                market_cap_formatted = f"${market_cap_float / 1000000000:.2f} billion"
-            else:
-                market_cap_formatted = f"${market_cap_float / 1000000:.2f} million"
-        except (ValueError, TypeError):
-            market_cap_formatted = str(market_cap)
-    
-    # Enhanced approach: Group statements by area, but include all of them
-    # Define the areas and create empty lists for each
-    areas = [
-        "VALUE", "HEALTH", "PERFORMANCE", "GROWTH", 
-        "DIVIDENDS", "RISK", "MANAGEMENT", "MARKET",
-        "BANK_HEALTH", "BANK_DIVIDENDS", "FUTURE", "PAST",
-        "REWARDS", "RISKS", "MISC"
-    ]
-    
-    area_statements = {area: [] for area in areas}
-    
-    # Distribute all statements to their respective areas
-    for statement in statements:
-        area = statement.get('area', '').upper()
-        if area:
-            # If this area exists in our mapping, add the statement
-            if area in area_statements:
-                area_statements[area].append(statement)
-            else:
-                # For any unknown areas, put in MISC
-                area_statements["MISC"].append(statement)
+    # Organize statements by area
+    area_statements, areas = _organize_statements_by_area(statements)
     
     # Start building prompt
     prompt = f"# Financial Analysis for {name} ({ticker})\n\n"
