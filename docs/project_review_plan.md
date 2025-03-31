@@ -15,6 +15,7 @@
 
 ## Code Structure
 - [x] Refactor large functions in portfolio_optimizer.py to be under 60 lines
+- [x] Break down complex formatting and calculation functions in portfolio_optimizer.py
 - [ ] Split analysis.py (1035 lines) into smaller modules
 - [ ] Implement stricter data encapsulation
 - [ ] Minimize variable scope to smallest required context

@@ -325,62 +325,76 @@ def map_portfolio_to_analysis(portfolio_data, analysis_results):
     
     return mapped_positions
 
-def optimize_portfolio(mapped_positions, total_value=None):
-    """Generate portfolio optimization recommendations.
+def validate_total_value(total_value):
+    """Validate and convert total value to float if needed.
+    
+    Args:
+        total_value: The total value to validate, can be float or string.
+        
+    Returns:
+        float or None: Validated total value or None if invalid.
+    """
+    if total_value is None:
+        return None
+        
+    if isinstance(total_value, str):
+        # Try to convert string to float - handle European format
+        try:
+            # Remove any non-numeric characters except for comma and period
+            cleaned_value = ''.join(c for c in total_value if c.isdigit() or c in ',.').strip()
+            # Replace comma with period for float conversion
+            cleaned_value = cleaned_value.replace('.', '').replace(',', '.')
+            total_value = float(cleaned_value)
+            print(f"Converted string total value to number: €{total_value:,.2f}")
+        except (ValueError, TypeError):
+            total_value = None
+            print(f"Could not convert total value string: {total_value}")
+    
+    return total_value
+
+def calculate_total_value_from_positions(mapped_positions):
+    """Calculate total portfolio value from positions.
     
     Args:
         mapped_positions (list): List of positions with analysis results.
-        total_value (float, optional): Total portfolio value. If None, calculated from positions.
         
     Returns:
-        dict: Dictionary containing optimization recommendations.
+        float: Calculated total value or default value if calculation fails.
     """
-    # Ensure total_value is a float
-    if total_value is not None:
-        if isinstance(total_value, str):
-            # Try to convert string to float - handle European format
+    calculated_value = 0
+    for position in mapped_positions:
+        position_value = position.get('Wert in EUR', 0)
+        if isinstance(position_value, str):
+            # Convert string to float if needed
             try:
-                # Remove any non-numeric characters except for comma and period
-                cleaned_value = ''.join(c for c in total_value if c.isdigit() or c in ',.').strip()
-                # Replace comma with period for float conversion
+                cleaned_value = ''.join(c for c in position_value if c.isdigit() or c in ',.').strip()
                 cleaned_value = cleaned_value.replace('.', '').replace(',', '.')
-                total_value = float(cleaned_value)
-                print(f"Converted string total value to number: €{total_value:,.2f}")
+                position_value = float(cleaned_value)
             except (ValueError, TypeError):
-                total_value = None
-                print(f"Could not convert total value string: {total_value}")
-    
-    # If total_value isn't provided or is zero, calculate from positions
-    if not total_value:
-        # First try to sum up the 'Wert in EUR' fields
-        calculated_value = 0
-        for position in mapped_positions:
-            position_value = position.get('Wert in EUR', 0)
-            if isinstance(position_value, str):
-                # Convert string to float if needed
-                try:
-                    cleaned_value = ''.join(c for c in position_value if c.isdigit() or c in ',.').strip()
-                    cleaned_value = cleaned_value.replace('.', '').replace(',', '.')
-                    position_value = float(cleaned_value)
-                except (ValueError, TypeError):
-                    position_value = 0
-            calculated_value += position_value
-            
-        if calculated_value > 0:
-            total_value = calculated_value
-            print(f"Using calculated total value from positions: €{total_value:,.2f}")
-        else:
-            # Fallback to a default value if can't calculate
-            total_value = 220575.80  # Default from the CSV
-            print(f"Using default total value: €{total_value:,.2f}")
+                position_value = 0
+        calculated_value += position_value
+        
+    if calculated_value > 0:
+        print(f"Using calculated total value from positions: €{calculated_value:,.2f}")
+        return calculated_value
     else:
-        print(f"Using provided total value: €{total_value:,.2f}")
+        # Fallback to a default value if can't calculate
+        default_value = 220575.80  # Default from the CSV
+        print(f"Using default total value: €{default_value:,.2f}")
+        return default_value
+
+def categorize_positions(mapped_positions):
+    """Categorize positions based on analysis recommendations.
     
-    # Categorize positions
+    Args:
+        mapped_positions (list): List of positions with analysis results.
+        
+    Returns:
+        tuple: Lists of buy, hold, sell positions.
+    """
     buys = []
     holds = []
     sells = []
-    no_recommendation = []
     
     for position in mapped_positions:
         if position['analysis'] is None:
@@ -410,7 +424,17 @@ def optimize_portfolio(mapped_positions, total_value=None):
             logger.warning(f"Couldn't categorize recommendation '{recommendation}' for {position.get('ticker', 'unknown')}. Defaulting to HOLD.")
             holds.append(position)
     
-    # Calculate current allocation
+    return buys, holds, sells
+
+def calculate_current_allocation(mapped_positions):
+    """Calculate current portfolio allocation.
+    
+    Args:
+        mapped_positions (list): List of positions with analysis results.
+        
+    Returns:
+        dict: Current allocation by ticker.
+    """
     current_allocation = {}
     for position in mapped_positions:
         ticker = position.get('ticker')
@@ -429,7 +453,18 @@ def optimize_portfolio(mapped_positions, total_value=None):
                 'recommendation': recommendation
             }
     
-    # Generate target allocation using factors from configuration
+    return current_allocation
+
+def calculate_target_allocation(current_allocation):
+    """Calculate target portfolio allocation based on recommendations.
+    
+    Args:
+        current_allocation (dict): Current allocation by ticker.
+        
+    Returns:
+        dict: Target allocation by ticker.
+    """
+    # Get factors from configuration
     buy_boost = config["portfolio"]["optimization"].get("buy_boost_factor", 1.5)
     sell_reduction = config["portfolio"]["optimization"].get("sell_reduction_factor", 0.5)
     
@@ -459,7 +494,19 @@ def optimize_portfolio(mapped_positions, total_value=None):
         for ticker, data in current_allocation.items():
             target_allocation[ticker] = data['percent']
     
-    # Calculate changes needed
+    return target_allocation
+
+def calculate_allocation_changes(current_allocation, target_allocation, total_value):
+    """Calculate changes needed to reach target allocation.
+    
+    Args:
+        current_allocation (dict): Current allocation by ticker.
+        target_allocation (dict): Target allocation by ticker.
+        total_value (float): Total portfolio value.
+        
+    Returns:
+        list: Sorted list of changes by magnitude.
+    """
     changes = {}
     for ticker, target in target_allocation.items():
         current = current_allocation[ticker]['percent']
@@ -505,12 +552,195 @@ def optimize_portfolio(mapped_positions, total_value=None):
         reverse=True
     )
     
+    return sorted_changes
+
+def optimize_portfolio(mapped_positions, total_value=None):
+    """Generate portfolio optimization recommendations.
+    
+    Args:
+        mapped_positions (list): List of positions with analysis results.
+        total_value (float, optional): Total portfolio value. If None, calculated from positions.
+        
+    Returns:
+        dict: Dictionary containing optimization recommendations.
+    """
+    # Validate and get total value
+    total_value = validate_total_value(total_value)
+    
+    # If total_value isn't provided or is invalid, calculate from positions
+    if not total_value:
+        total_value = calculate_total_value_from_positions(mapped_positions)
+    else:
+        print(f"Using provided total value: €{total_value:,.2f}")
+    
+    # Categorize positions
+    buys, holds, sells = categorize_positions(mapped_positions)
+    
+    # Calculate current allocation
+    current_allocation = calculate_current_allocation(mapped_positions)
+    
+    # Calculate target allocation
+    target_allocation = calculate_target_allocation(current_allocation)
+    
+    # Calculate changes needed
+    sorted_changes = calculate_allocation_changes(current_allocation, target_allocation, total_value)
+    
     return {
         'total_value': total_value,
         'current_allocation': current_allocation,
         'target_allocation': target_allocation,
         'changes': sorted_changes
     }
+
+def format_portfolio_summary(portfolio_data, total_value):
+    """Format portfolio summary section in markdown.
+    
+    Args:
+        portfolio_data (dict): Portfolio data.
+        total_value (float): Total portfolio value.
+        
+    Returns:
+        str: Markdown-formatted portfolio summary.
+    """
+    markdown = "## Portfolio Summary\n\n"
+    markdown += f"Date: {portfolio_data['date']}\n\n"
+    
+    # Format the total value ensuring it's a number
+    if isinstance(total_value, str):
+        try:
+            total_value = float(total_value.replace(',', '').replace('.', '').replace('€', ''))
+        except (ValueError, TypeError):
+            total_value = 0.0
+    
+    markdown += f"Total portfolio value: €{total_value:,.2f}\n"
+    markdown += f"Total positions: {len(portfolio_data['positions'])}\n\n"
+    
+    return markdown
+
+def ensure_numeric_value(value, default=0.0):
+    """Ensure a value is numeric, converting from string if needed.
+    
+    Args:
+        value: Value to ensure is numeric.
+        default (float): Default value if conversion fails.
+        
+    Returns:
+        float: Numeric value.
+    """
+    if isinstance(value, (int, float)):
+        return float(value)
+        
+    if isinstance(value, str):
+        try:
+            # Handle various formats including percentage and currency
+            clean_value = value.replace('%', '').replace(',', '.').replace('€', '').strip()
+            return float(clean_value)
+        except (ValueError, TypeError):
+            return default
+    
+    return default
+
+def format_changes_table(changes):
+    """Format table of recommended changes in markdown.
+    
+    Args:
+        changes (list): List of portfolio changes.
+        
+    Returns:
+        str: Markdown-formatted table of changes.
+    """
+    markdown = "## Optimization Recommendations\n\n"
+    markdown += "Based on the value investing analysis, the following changes are recommended:\n\n"
+    
+    # Add table of recommended changes
+    markdown += "| Stock | Ticker | Current % | Target % | Change % | Change Value (€) | Recommendation |\n"
+    markdown += "|-------|--------|-----------|----------|----------|-----------------|----------------|\n"
+    
+    for change in changes:
+        markdown += f"| {change['name']} | {change['ticker']} | "
+        
+        # Ensure values are numeric
+        current_percent = ensure_numeric_value(change['current_percent'])
+        target_percent = ensure_numeric_value(change['target_percent'], current_percent)
+        change_percent = ensure_numeric_value(change['change_percent'])
+        change_value = ensure_numeric_value(change['change_value'])
+        
+        markdown += f"{current_percent:.2f}% | {target_percent:.2f}% | "
+        
+        # Format change with plus/minus sign
+        change_percent_str = f"+{change_percent:.2f}%" if change_percent >= 0 else f"{change_percent:.2f}%"
+        change_value_str = f"+{change_value:,.2f}" if change_value >= 0 else f"{change_value:,.2f}"
+        
+        markdown += f"{change_percent_str} | {change_value_str} | {change['recommendation']} |\n"
+    
+    return markdown
+
+def format_buy_recommendations(changes):
+    """Format buy recommendations section in markdown.
+    
+    Args:
+        changes (list): List of portfolio changes.
+        
+    Returns:
+        str: Markdown-formatted buy recommendations.
+    """
+    # Buy recommendations (positive change values)
+    buys = [c for c in changes if ensure_numeric_value(c['change_value']) > 0]
+    if not buys:
+        return ""
+        
+    markdown = "### Stocks to Buy/Increase\n\n"
+    for buy in buys:
+        # Ensure values are numeric
+        change_value = ensure_numeric_value(buy['change_value'])
+        current_percent = ensure_numeric_value(buy['current_percent'])
+        target_percent = ensure_numeric_value(buy['target_percent'], current_percent)
+        
+        markdown += f"- **{buy['name']} ({buy['ticker']})**: Increase position by €{change_value:,.2f} "
+        markdown += f"(from {current_percent:.2f}% to {target_percent:.2f}%)\n"
+        markdown += f"  - *Rationale*: {buy['recommendation']}\n\n"
+    
+    return markdown
+
+def format_sell_recommendations(changes):
+    """Format sell recommendations section in markdown.
+    
+    Args:
+        changes (list): List of portfolio changes.
+        
+    Returns:
+        str: Markdown-formatted sell recommendations.
+    """
+    # Sell recommendations (negative change values)
+    sells = [c for c in changes if ensure_numeric_value(c['change_value']) < 0]
+    if not sells:
+        return ""
+        
+    markdown = "### Stocks to Sell/Reduce\n\n"
+    for sell in sells:
+        # Ensure values are numeric
+        change_value = ensure_numeric_value(sell['change_value'])
+        current_percent = ensure_numeric_value(sell['current_percent'])
+        target_percent = ensure_numeric_value(sell['target_percent'], current_percent)
+        
+        markdown += f"- **{sell['name']} ({sell['ticker']})**: Reduce position by €{abs(change_value):,.2f} "
+        markdown += f"(from {current_percent:.2f}% to {target_percent:.2f}%)\n"
+        markdown += f"  - *Rationale*: {sell['recommendation']}\n\n"
+    
+    return markdown
+
+def format_disclaimer():
+    """Format disclaimer section in markdown.
+    
+    Returns:
+        str: Markdown-formatted disclaimer.
+    """
+    markdown = "## Disclaimer\n\n"
+    markdown += "These recommendations are based on algorithmic analysis of financial data and should not be "
+    markdown += "considered financial advice. All investment decisions should be made based on your own research "
+    markdown += "and in consultation with a qualified financial advisor. Past performance is not indicative of future results.\n"
+    
+    return markdown
 
 def format_optimization_to_markdown(optimization_results, portfolio_data):
     """Format optimization results to markdown.
@@ -525,137 +755,19 @@ def format_optimization_to_markdown(optimization_results, portfolio_data):
     markdown = "# Portfolio Optimization Recommendations\n\n"
     
     # Add portfolio summary
-    markdown += "## Portfolio Summary\n\n"
-    markdown += f"Date: {portfolio_data['date']}\n\n"
-    
-    # Format the total value ensuring it's a number
-    total_value = optimization_results['total_value']
-    if isinstance(total_value, str):
-        try:
-            total_value = float(total_value.replace(',', '').replace('.', '').replace('€', ''))
-        except (ValueError, TypeError):
-            total_value = 0.0
-    
-    markdown += f"Total portfolio value: €{total_value:,.2f}\n"
-    markdown += f"Total positions: {len(portfolio_data['positions'])}\n\n"
+    markdown += format_portfolio_summary(portfolio_data, optimization_results['total_value'])
     
     # Add optimization summary
-    markdown += "## Optimization Recommendations\n\n"
-    markdown += "Based on the value investing analysis, the following changes are recommended:\n\n"
-    
-    # Add table of recommended changes
-    markdown += "| Stock | Ticker | Current % | Target % | Change % | Change Value (€) | Recommendation |\n"
-    markdown += "|-------|--------|-----------|----------|----------|-----------------|----------------|\n"
-    
-    for change in optimization_results['changes']:
-        markdown += f"| {change['name']} | {change['ticker']} | "
-        
-        # Ensure values are numeric
-        current_percent = change['current_percent']
-        if isinstance(current_percent, str):
-            try:
-                current_percent = float(current_percent.replace('%', '').strip())
-            except (ValueError, TypeError):
-                current_percent = 0.0
-                
-        target_percent = change['target_percent']
-        if isinstance(target_percent, str):
-            try:
-                target_percent = float(target_percent.replace('%', '').strip())
-            except (ValueError, TypeError):
-                target_percent = current_percent
-        
-        change_percent = change['change_percent']
-        if isinstance(change_percent, str):
-            try:
-                change_percent = float(change_percent.replace('%', '').strip())
-            except (ValueError, TypeError):
-                change_percent = 0.0
-        
-        change_value = change['change_value']
-        if isinstance(change_value, str):
-            try:
-                change_value = float(change_value.replace(',', '').replace('.', '').replace('€', ''))
-            except (ValueError, TypeError):
-                change_value = 0.0
-        
-        markdown += f"{current_percent:.2f}% | {target_percent:.2f}% | "
-        
-        # Format change with plus/minus sign
-        change_percent_str = f"+{change_percent:.2f}%" if change_percent >= 0 else f"{change_percent:.2f}%"
-        change_value_str = f"+{change_value:,.2f}" if change_value >= 0 else f"{change_value:,.2f}"
-        
-        markdown += f"{change_percent_str} | {change_value_str} | {change['recommendation']} |\n"
+    markdown += format_changes_table(optimization_results['changes'])
     
     # Add specific action items section
     markdown += "\n## Action Items\n\n"
     
-    # Buy recommendations (positive change values)
-    buys = [c for c in optimization_results['changes'] if c['change_value'] > 0]
-    if buys:
-        markdown += "### Stocks to Buy/Increase\n\n"
-        for buy in buys:
-            # Ensure change_value is a number
-            change_value = buy['change_value']
-            if isinstance(change_value, str):
-                try:
-                    change_value = float(change_value.replace(',', '').replace('.', '').replace('€', ''))
-                except (ValueError, TypeError):
-                    change_value = 0.0
-            
-            current_percent = buy['current_percent']
-            if isinstance(current_percent, str):
-                try:
-                    current_percent = float(current_percent.replace('%', '').strip())
-                except (ValueError, TypeError):
-                    current_percent = 0.0
-                    
-            target_percent = buy['target_percent']
-            if isinstance(target_percent, str):
-                try:
-                    target_percent = float(target_percent.replace('%', '').strip())
-                except (ValueError, TypeError):
-                    target_percent = current_percent
-            
-            markdown += f"- **{buy['name']} ({buy['ticker']})**: Increase position by €{change_value:,.2f} "
-            markdown += f"(from {current_percent:.2f}% to {target_percent:.2f}%)\n"
-            markdown += f"  - *Rationale*: {buy['recommendation']}\n\n"
-    
-    # Sell recommendations (negative change values)
-    sells = [c for c in optimization_results['changes'] if c['change_value'] < 0]
-    if sells:
-        markdown += "### Stocks to Sell/Reduce\n\n"
-        for sell in sells:
-            # Ensure change_value is a number
-            change_value = sell['change_value']
-            if isinstance(change_value, str):
-                try:
-                    change_value = float(change_value.replace(',', '').replace('.', '').replace('€', ''))
-                except (ValueError, TypeError):
-                    change_value = 0.0
-            
-            current_percent = sell['current_percent']
-            if isinstance(current_percent, str):
-                try:
-                    current_percent = float(current_percent.replace('%', '').strip())
-                except (ValueError, TypeError):
-                    current_percent = 0.0
-                    
-            target_percent = sell['target_percent']
-            if isinstance(target_percent, str):
-                try:
-                    target_percent = float(target_percent.replace('%', '').strip())
-                except (ValueError, TypeError):
-                    target_percent = current_percent
-            
-            markdown += f"- **{sell['name']} ({sell['ticker']})**: Reduce position by €{abs(change_value):,.2f} "
-            markdown += f"(from {current_percent:.2f}% to {target_percent:.2f}%)\n"
-            markdown += f"  - *Rationale*: {sell['recommendation']}\n\n"
+    # Add buy and sell recommendations
+    markdown += format_buy_recommendations(optimization_results['changes'])
+    markdown += format_sell_recommendations(optimization_results['changes'])
     
     # Add disclaimer
-    markdown += "\n## Disclaimer\n\n"
-    markdown += "These recommendations are based on algorithmic analysis of financial data and should not be "
-    markdown += "considered financial advice. All investment decisions should be made based on your own research "
-    markdown += "and in consultation with a qualified financial advisor. Past performance is not indicative of future results.\n"
+    markdown += "\n" + format_disclaimer()
     
     return markdown 
