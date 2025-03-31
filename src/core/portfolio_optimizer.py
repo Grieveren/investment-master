@@ -19,6 +19,216 @@ from src.core.config import config
 from src.core.file_operations import save_markdown
 from src.core.portfolio import get_stock_ticker_and_exchange
 
+def read_csv_content(csv_path):
+    """Read raw content from a CSV file.
+    
+    Args:
+        csv_path (str): Path to the CSV file containing portfolio data.
+        
+    Returns:
+        str: Raw content of the CSV file or None if error.
+    """
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except FileNotFoundError:
+        logger.error(f"Portfolio CSV file {csv_path} not found.")
+        return None
+    except Exception as e:
+        logger.error(f"Error reading portfolio CSV file: {e}")
+        return None
+
+def determine_delimiter(lines):
+    """Determine the delimiter used in the CSV file.
+    
+    Args:
+        lines (list): List of lines from the CSV file.
+        
+    Returns:
+        str: Delimiter character (';' or ',').
+    """
+    delimiter = ';'
+    if lines and ',' in lines[0] and ';' not in lines[0]:
+        delimiter = ','
+    return delimiter
+
+def extract_portfolio_summary(lines, delimiter):
+    """Extract portfolio summary information from CSV header.
+    
+    Args:
+        lines (list): List of lines from the CSV file.
+        delimiter (str): Delimiter character.
+        
+    Returns:
+        dict: Portfolio summary information.
+        str: Date string in YYYY-MM-DD format.
+    """
+    portfolio_summary = {}
+    date = datetime.now().strftime("%Y-%m-%d")  # Default date
+    
+    # If using semicolon format, try to extract summary data
+    if delimiter == ';':
+        for i in range(10):  # First 10 lines usually contain summary data
+            if i < len(lines) and delimiter in lines[i]:
+                key, value = lines[i].split(delimiter, 1)
+                portfolio_summary[key] = process_summary_value(key, value)
+                
+                # Try to extract date
+                date_match = re.search(r'(\d{2}\.\d{2}\.\d{4})', value)
+                if date_match:
+                    date_str = date_match.group(1)
+                    try:
+                        date_obj = datetime.strptime(date_str, "%d.%m.%Y")
+                        date = date_obj.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+    
+    # Set the date in the summary
+    portfolio_summary['date'] = date
+    return portfolio_summary, date
+
+def process_summary_value(key, value):
+    """Process and convert summary values to appropriate types.
+    
+    Args:
+        key (str): Key name.
+        value (str): Raw value string.
+        
+    Returns:
+        float or str: Processed value.
+    """
+    value = value.strip()
+    
+    if 'EUR' in value:
+        # Extract numerical value and convert to float
+        match = re.search(r'([\d.,]+)', value.replace(' ', ''))
+        if match:
+            # Replace comma with dot for float conversion
+            num_str = match.group(1).replace('.', '').replace(',', '.')
+            try:
+                return float(num_str)
+            except ValueError:
+                return value
+    elif '%' in value:
+        # Extract percentage and convert to float
+        match = re.search(r'([+-]?[\d.,]+)', value.replace(',', '.'))
+        if match:
+            return float(match.group(1))
+    
+    return value
+
+def find_header_line(lines, delimiter):
+    """Find the line containing column headers.
+    
+    Args:
+        lines (list): List of lines from the CSV file.
+        delimiter (str): Delimiter character.
+        
+    Returns:
+        int or None: Index of header line or None if not found.
+    """
+    # Check for traditional semicolon format
+    for i, line in enumerate(lines):
+        if delimiter == ';' and line.startswith('Position;Bezeichnung;WKN;ISIN'):
+            return i
+            
+    # Check for comma-separated format (combined_portfolio.csv)
+    if delimiter == ',':
+        for i, line in enumerate(lines):
+            if 'Security' in line and 'ISIN' in line and 'Shares' in line:
+                return i
+    
+    # If we can't find a header line but it looks like a CSV, use the first line
+    if lines and delimiter in lines[0]:
+        return 0
+    
+    return None
+
+def parse_positions(lines, header_line_idx, headers, delimiter):
+    """Parse position data from CSV lines.
+    
+    Args:
+        lines (list): List of lines from the CSV file.
+        header_line_idx (int): Index of the header line.
+        headers (list): List of column headers.
+        delimiter (str): Delimiter character.
+        
+    Returns:
+        list: List of parsed positions.
+    """
+    positions = []
+    for i in range(header_line_idx + 1, len(lines)):
+        line = lines[i].strip()
+        if not line or line.startswith('Diese Aufstellung'):
+            break
+        
+        # For the comma-separated format, handle quoted values correctly
+        if delimiter == ',':
+            values = next(csv.reader([line], delimiter=delimiter, quotechar='"'))
+        else:
+            values = line.split(delimiter)
+        
+        if len(values) < len(headers):
+            continue
+        
+        position = create_position_entry(headers, values)
+        positions.append(position)
+    
+    return positions
+
+def create_position_entry(headers, values):
+    """Create a position entry from header and value lists.
+    
+    Args:
+        headers (list): List of column headers.
+        values (list): List of values.
+        
+    Returns:
+        dict: Position entry with processed values.
+    """
+    position = {}
+    for j, header in enumerate(headers):
+        if j < len(values):
+            value = values[j].strip() if values[j] else ""
+            
+            # Skip empty values
+            if not value:
+                position[header] = None
+                continue
+            
+            position[header] = convert_position_value(header, value)
+    
+    return position
+
+def convert_position_value(header, value):
+    """Convert position values to appropriate types.
+    
+    Args:
+        header (str): Column header.
+        value (str): Raw value string.
+        
+    Returns:
+        int, float, or str: Converted value.
+    """
+    # Convert numerical values
+    if re.match(r'^[+-]?\d+$', value):
+        return int(value)
+    elif re.match(r'^[+-]?\d+[.,]\d+$', value):
+        return float(value.replace(',', '.'))
+    elif header == 'Veränderung in %' and value.startswith('+'):
+        return float(value.replace('+', '').replace(',', '.'))
+    elif header == 'Veränderung in EUR' and value.startswith('+'):
+        return float(value.replace('+', '').replace('.', '').replace(',', '.'))
+    elif header == 'Anteil im Depot':
+        return float(value.replace(',', '.'))
+    elif header in ['Einstandskurs', 'akt. Kurs']:
+        return float(value.replace(',', '.'))
+    elif header == 'Einstandswert in EUR' or header == 'Wert in EUR':
+        return float(value.replace('.', '').replace(',', '.'))
+    else:
+        return value
+
 def parse_portfolio_csv(csv_path):
     """Parse portfolio data from a bank CSV export.
     
@@ -28,160 +238,39 @@ def parse_portfolio_csv(csv_path):
     Returns:
         dict: Dictionary containing portfolio summary and positions.
     """
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-    except FileNotFoundError:
-        logger.error(f"Portfolio CSV file {csv_path} not found.")
-        return None
-    except Exception as e:
-        logger.error(f"Error reading portfolio CSV file: {e}")
+    content = read_csv_content(csv_path)
+    if not content:
         return None
     
     # Print first 10 lines of content for debugging
     print("Portfolio CSV - first 10 lines:")
-    for i, line in enumerate(content.split('\n')[:10]):
+    lines = content.split('\n')
+    for i, line in enumerate(lines[:10]):
         print(f"Line {i}: {line}")
     
-    # Split the content into lines
-    lines = content.split('\n')
-    
-    # Determine the delimiter (semicolon or comma)
-    delimiter = ';'
-    if lines and ',' in lines[0] and ';' not in lines[0]:
-        delimiter = ','
-    
-    # Extract portfolio summary from header
-    portfolio_summary = {}
-    date = datetime.now().strftime("%Y-%m-%d")  # Default date
-    
-    # If using semicolon format, try to extract summary data
-    if delimiter == ';':
-        for i in range(10):  # First 10 lines usually contain summary data
-            if i < len(lines) and delimiter in lines[i]:
-                key, value = lines[i].split(delimiter, 1)
-                # Clean up values and convert to appropriate types
-                if 'EUR' in value:
-                    # Extract numerical value and convert to float
-                    # Remove spaces and replace comma with dot for float conversion
-                    clean_value = value.strip()
-                    match = re.search(r'([\d.,]+)', clean_value.replace(' ', ''))
-                    if match:
-                        # Replace comma with dot for float conversion
-                        num_str = match.group(1).replace('.', '').replace(',', '.')
-                        try:
-                            portfolio_summary[key] = float(num_str)
-                        except ValueError:
-                            portfolio_summary[key] = clean_value
-                    else:
-                        portfolio_summary[key] = clean_value
-                elif '%' in value:
-                    # Extract percentage and convert to float
-                    match = re.search(r'([+-]?[\d.,]+)', value.replace(',', '.'))
-                    if match:
-                        portfolio_summary[key] = float(match.group(1))
-                else:
-                    portfolio_summary[key] = value.strip()
-                    
-                # Try to extract date
-                date_match = re.search(r'(\d{2}\.\d{2}\.\d{4})', value)
-                if date_match:
-                    date_str = date_match.group(1)
-                    try:
-                        date_obj = datetime.datetime.strptime(date_str, "%d.%m.%Y")
-                        date = date_obj.strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
-    
-    # Set the date in the summary
-    portfolio_summary['date'] = date
+    delimiter = determine_delimiter(lines)
+    portfolio_summary, date = extract_portfolio_summary(lines, delimiter)
     
     # Print the extracted summary values for debugging
     print("\nPortfolio summary extracted values:")
     for key, value in portfolio_summary.items():
         print(f"{key}: {value} (type: {type(value)})")
     
-    # Find the line with column headers
-    header_line_idx = None
-    
-    # Check for traditional semicolon format
-    for i, line in enumerate(lines):
-        if delimiter == ';' and line.startswith('Position;Bezeichnung;WKN;ISIN'):
-            header_line_idx = i
-            break
-            
-    # Check for comma-separated format (combined_portfolio.csv)
-    if header_line_idx is None and delimiter == ',':
-        for i, line in enumerate(lines):
-            if 'Security' in line and 'ISIN' in line and 'Shares' in line:
-                header_line_idx = i
-                break
-    
+    header_line_idx = find_header_line(lines, delimiter)
     if header_line_idx is None:
-        # If we can't find a header line but it looks like a CSV, use the first line
-        if lines and delimiter in lines[0]:
-            header_line_idx = 0
-        else:
-            logger.error("Could not find column headers in CSV file.")
-            return {"summary": portfolio_summary, "positions": []}
+        logger.error("Could not find column headers in CSV file.")
+        return {"summary": portfolio_summary, "positions": []}
     
     # Get column headers
-    headers = lines[header_line_idx].split(delimiter)
-    headers = [h.strip() for h in headers]
+    headers = [h.strip() for h in lines[header_line_idx].split(delimiter)]
     
     # Parse positions
-    positions = []
-    for i in range(header_line_idx + 1, len(lines)):
-        line = lines[i].strip()
-        if not line or line.startswith('Diese Aufstellung'):
-            break
-        
-        # For the comma-separated format, handle quoted values correctly
-        if delimiter == ',':
-            # Use the csv module to handle quotes properly
-            import csv
-            values = next(csv.reader([line], delimiter=delimiter, quotechar='"'))
-        else:
-            values = line.split(delimiter)
-        
-        if len(values) < len(headers):
-            continue
-        
-        position = {}
-        for j, header in enumerate(headers):
-            if j < len(values):
-                # Clean and convert values based on their type
-                value = values[j].strip() if values[j] else ""
-                
-                # Skip empty values
-                if not value:
-                    position[header] = None
-                    continue
-                
-                # Convert numerical values
-                if re.match(r'^[+-]?\d+$', value):
-                    position[header] = int(value)
-                elif re.match(r'^[+-]?\d+[.,]\d+$', value):
-                    position[header] = float(value.replace(',', '.'))
-                elif header == 'Veränderung in %' and value.startswith('+'):
-                    position[header] = float(value.replace('+', '').replace(',', '.'))
-                elif header == 'Veränderung in EUR' and value.startswith('+'):
-                    position[header] = float(value.replace('+', '').replace('.', '').replace(',', '.'))
-                elif header == 'Anteil im Depot':
-                    position[header] = float(value.replace(',', '.'))
-                elif header in ['Einstandskurs', 'akt. Kurs']:
-                    position[header] = float(value.replace(',', '.'))
-                elif header == 'Einstandswert in EUR' or header == 'Wert in EUR':
-                    position[header] = float(value.replace('.', '').replace(',', '.'))
-                else:
-                    position[header] = value
-        
-        positions.append(position)
+    positions = parse_positions(lines, header_line_idx, headers, delimiter)
     
     return {
         "summary": portfolio_summary,
         "positions": positions,
-        "date": datetime.now().strftime("%Y-%m-%d")
+        "date": date
     }
 
 def map_portfolio_to_analysis(portfolio_data, analysis_results):
