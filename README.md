@@ -33,14 +33,23 @@ investment-master/
 │   ├── scripts/                 # Standalone scripts
 │   │   ├── portfolio_analyzer.py # Main analysis script
 │   │   ├── claude_portfolio_optimizer.py # Claude-based optimizer
-│   │   └── run_portfolio_analysis.sh # Analysis execution script
+│   │   ├── analyze_company.py   # Single company analysis script
+│   │   ├── analyze_companies.py # All companies analysis script
+│   │   └── fetch_portfolio_data.py # Data fetching script
 │   └── tools/                   # Utility tools
 │       ├── api.py               # API interaction utilities
 │       ├── changelog.py         # Changelog utilities
 │       ├── examine_api_data.py  # API data inspection tool
 │       ├── search_company.py    # Company search tool
 │       └── update_changelog.py  # Changelog update script
+├── scripts/                     # Shell scripts for modular testing
+│   ├── fetch_data_only.sh       # Script to fetch data only
+│   ├── run_company_analyses.sh  # Script to run company analyses
+│   └── run_portfolio_analysis_only.sh # Script for portfolio analysis
 ├── tests/                       # All test files
+│   └── diagnostic/              # Diagnostic tests
+│       ├── run_tsm_test.py      # Test for TSM data fetching
+│       └── test_rheinmetall.py  # Test for Rheinmetall data fetching
 ├── data/                        # Data files
 │   ├── processed/               # Processed analysis results
 │   ├── raw/                     # Raw API data
@@ -66,16 +75,18 @@ investment-master/
    cd investment-master
    ```
 
-2. Install the required packages:
+2. Create a virtual environment and install dependencies:
    ```
-   pip install -r requirements.txt
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -e .          # Installs the package in development mode with all dependencies
    ```
 
 3. Set up your API keys in a `.env` file:
    ```
+   SWS_API_TOKEN=your_simplywall_st_api_token
    ANTHROPIC_API_KEY=your_anthropic_api_key
    OPENAI_API_KEY=your_openai_api_key
-   SWS_API_KEY=your_simplywall_st_api_key
    ```
 
 ## Usage
@@ -96,6 +107,35 @@ This script performs:
 ```bash
 ./run_portfolio_analysis.sh --skip-analysis
 ```
+
+### Modular Testing Scripts
+
+The project includes modular scripts for testing individual components:
+
+1. **Fetch data only**:
+   ```bash
+   ./scripts/fetch_data_only.sh
+   ```
+   Fetches fresh data for all companies in your portfolio without running analysis.
+
+2. **Run company-level analyses**:
+   ```bash
+   # Analyze all companies
+   ./scripts/run_company_analyses.sh
+
+   # Analyze a specific company
+   ./scripts/run_company_analyses.sh --company "Microsoft"
+
+   # Specify a different model
+   ./scripts/run_company_analyses.sh --model "gpt-4"
+   ```
+   Runs AI analysis on individual companies using existing API data.
+
+3. **Run portfolio-level analysis only**:
+   ```bash
+   ./scripts/run_portfolio_analysis_only.sh
+   ```
+   Performs portfolio-level optimization using previously generated company analyses.
 
 ### Running a single stock analysis test:
 
