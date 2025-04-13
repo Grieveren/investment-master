@@ -28,9 +28,88 @@ def fetch_company_data(ticker, exchange, api_token, max_retries=None):
     retry_max_delay = config["retry"]["retry_max_delay"]
     sws_api_url = config["api"]["sws_api_url"]
 
-    query = """
-    query companyByExchangeAndTickerSymbol($exchange: String!, $symbol: String!) {
-      companyByExchangeAndTickerSymbol(exchange: $exchange, tickerSymbol: $symbol) {
+    # Step 1: Search for company by ticker and exchange to get ID
+    search_query = f"{ticker} {exchange}"
+    logger.info(f"Searching for company: {search_query}")
+    
+    search_query_gql = """
+    query searchCompanies($query: String!) {
+      searchCompanies(query: $query) {
+        id
+        name
+        exchangeSymbol
+        tickerSymbol
+      }
+    }
+    """
+    
+    search_variables = {
+        "query": search_query
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    # First search for the company ID
+    company_id = None
+    retries = 0
+    while retries <= max_retries and company_id is None:
+        try:
+            if retries > 0:
+                delay = min(retry_base_delay * (2 ** (retries - 1)) + random.uniform(0, 1), retry_max_delay)
+                logger.info(f"Search retry attempt {retries}/{max_retries} after {delay:.2f}s delay...")
+                time.sleep(delay)
+            
+            search_response = requests.post(
+                sws_api_url,
+                headers=headers,
+                json={"query": search_query_gql, "variables": search_variables},
+                timeout=30
+            )
+            
+            logger.info(f"Search response status code: {search_response.status_code}")
+            search_response.raise_for_status()
+            
+            search_data = search_response.json()
+            
+            if "errors" in search_data:
+                logger.error(f"GraphQL search error: {search_data['errors']}")
+                retries += 1
+                continue
+            
+            # Find the company in search results that matches our ticker and exchange
+            if "data" in search_data and "searchCompanies" in search_data["data"]:
+                companies = search_data["data"]["searchCompanies"]
+                for company in companies:
+                    if (company["tickerSymbol"].upper() == ticker.upper() and 
+                        company["exchangeSymbol"].upper() == exchange.upper()):
+                        company_id = company["id"]
+                        logger.info(f"Found company ID: {company_id} for {ticker} on {exchange}")
+                        break
+                
+                # If exact match not found but we have results, use the first one
+                if company_id is None and companies:
+                    company_id = companies[0]["id"]
+                    logger.warning(f"Exact match not found. Using first result with ID: {company_id}")
+            
+            if company_id is None:
+                logger.warning(f"Company not found in search results. Retrying...")
+                retries += 1
+            
+        except Exception as e:
+            logger.error(f"Error searching for company {ticker} on {exchange}: {e}")
+            retries += 1
+    
+    if company_id is None:
+        logger.error(f"Failed to find company ID for {ticker} on {exchange} after {max_retries} retries")
+        return None
+    
+    # Step 2: Fetch company details using the ID
+    company_query = """
+    query company($id: ID!) {
+      company(id: $id) {
         id
         name
         exchangeSymbol
@@ -51,37 +130,30 @@ def fetch_company_data(ticker, exchange, api_token, max_retries=None):
     }
     """
     
-    variables = {
-        "exchange": exchange,
-        "symbol": ticker
+    company_variables = {
+        "id": company_id
     }
     
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json"
-    }
-    
+    # Now fetch the company details
     retries = 0
     while retries <= max_retries:
         response = None
         try:
             if retries > 0:
-                # Calculate exponential backoff delay with jitter
                 delay = min(retry_base_delay * (2 ** (retries - 1)) + random.uniform(0, 1), retry_max_delay)
-                logger.info(f"Retry attempt {retries}/{max_retries} after {delay:.2f}s delay...")
+                logger.info(f"Details retry attempt {retries}/{max_retries} after {delay:.2f}s delay...")
                 time.sleep(delay)
                 
             response = requests.post(
                 sws_api_url,
                 headers=headers,
-                json={"query": query, "variables": variables},
-                timeout=30  # Set a timeout to avoid hanging requests
+                json={"query": company_query, "variables": company_variables},
+                timeout=30
             )
             
-            # Debug output to see raw response
-            logger.info(f"Response status code: {response.status_code}")
-            
+            logger.info(f"Details response status code: {response.status_code}")
             response.raise_for_status()
+            
             response_data = response.json()
             
             # Check for server-side errors in the GraphQL response
@@ -100,7 +172,16 @@ def fetch_company_data(ticker, exchange, api_token, max_retries=None):
                     logger.error(f"GraphQL error: {error_msg}")
                     return response_data  # Return the error response for further analysis
             
-            # If we got here, the request was successful
+            # Transform the response to match the expected structure in the rest of the codebase
+            if "data" in response_data and "company" in response_data["data"]:
+                # Create a response structure that matches the old API format
+                transformed_response = {
+                    "data": {
+                        "companyByExchangeAndTickerSymbol": response_data["data"]["company"]
+                    }
+                }
+                return transformed_response
+            
             return response_data
             
         except requests.exceptions.RequestException as e:
