@@ -60,6 +60,8 @@ def get_stock_ticker_and_exchange(stock_name):
     # ways it might appear in portfolio data (ticker symbol, full name, abbreviated name)
     stock_map = {
         # Company names
+        "Rheinmetall AG": {"ticker": "RHM", "exchange": "XTRA"},
+        "Rheinmetall": {"ticker": "RHM", "exchange": "XTRA"},
         "Berkshire Hathaway B": {"ticker": "BRK.B", "exchange": "NYSE"},
         "Allianz SE": {"ticker": "ALV", "exchange": "XTRA"},
         "GitLab Inc.": {"ticker": "GTLB", "exchange": "NasdaqGS"},
@@ -77,6 +79,7 @@ def get_stock_ticker_and_exchange(stock_name):
         "TSMC": {"ticker": "TSM", "exchange": "NYSE"},
         
         # Direct ticker mappings for all companies
+        "RHM": {"ticker": "RHM", "exchange": "XTRA"},
         "MSFT": {"ticker": "MSFT", "exchange": "NasdaqGS"},
         "NVDA": {"ticker": "NVDA", "exchange": "NasdaqGS"},
         "GOOG": {"ticker": "GOOG", "exchange": "NasdaqGS"},

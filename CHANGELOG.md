@@ -1,5 +1,20 @@
 # Changelog
 
+## 2025-04-11: Added Modular Testing Scripts and Fixed Rheinmetall Data Fetching
+
+### Fixed Data Fetching for Rheinmetall
+- Added ticker mapping for "Rheinmetall AG" to use RHM on XTRA exchange
+- Updated portfolio to include Rheinmetall AG
+- Fixed Python import path issues by creating a dedicated virtual environment
+
+### Added Modular Testing Scripts
+- Created dedicated scripts for individual testing of pipeline components:
+  - `scripts/fetch_data_only.sh`: Fetch fresh data without running analysis
+  - `scripts/run_company_analyses.sh`: Run company-level analyses (all or specific company)
+  - `scripts/run_portfolio_analysis_only.sh`: Run portfolio-level analysis only
+- Added Python implementations for each script
+- Improved efficiency of testing and debugging
+
 ## 2025-04-09: Portfolio Analysis Run (Anthropic Claude)
 
 Ran portfolio analysis on 11 stocks using Anthropic Claude model.
