@@ -60,6 +60,7 @@ def get_stock_ticker_and_exchange(stock_name):
     # ways it might appear in portfolio data (ticker symbol, full name, abbreviated name)
     stock_map = {
         # Company names
+        "RHEINMETALL AG": {"ticker": "RHM", "exchange": "XTRA"},
         "Rheinmetall AG": {"ticker": "RHM", "exchange": "XTRA"},
         "Rheinmetall": {"ticker": "RHM", "exchange": "XTRA"},
         "Berkshire Hathaway B": {"ticker": "BRK.B", "exchange": "NYSE"},
@@ -77,6 +78,21 @@ def get_stock_ticker_and_exchange(stock_name):
         "Taiwan Semiconductor Manufacturing Company": {"ticker": "TSM", "exchange": "NYSE"},
         "Taiwan Semiconductor Manufacturing": {"ticker": "TSM", "exchange": "NYSE"},
         "TSMC": {"ticker": "TSM", "exchange": "NYSE"},
+        
+        # CSV format variations
+        "ALLIANZ SE NA O.N.": {"ticker": "ALV", "exchange": "XTRA"},
+        "ADVANCED MIC.DEV.  DL-,01": {"ticker": "AMD", "exchange": "NasdaqGS"},
+        "BERKSH. H.B NEW DL-,00333": {"ticker": "BRK.B", "exchange": "NYSE"},
+        "MICROSOFT    DL-,00000625": {"ticker": "MSFT", "exchange": "NasdaqGS"},
+        "ASML HOLDING EO -": {"ticker": "ASML", "exchange": "NasdaqGS"},
+        "ASML HOLDING    EO -,09": {"ticker": "ASML", "exchange": "NasdaqGS"},
+        "ALPHABET INC.CL.C DL-": {"ticker": "GOOG", "exchange": "NasdaqGS"},
+        "ALPHABET INC.CL.C DL-,001": {"ticker": "GOOG", "exchange": "NasdaqGS"},
+        "NVIDIA CORP. DL-": {"ticker": "NVDA", "exchange": "NasdaqGS"},
+        "NVIDIA CORP.      DL-,001": {"ticker": "NVDA", "exchange": "NasdaqGS"},
+        "TAIWAN SEMICON.MANU.ADR/5": {"ticker": "TSM", "exchange": "NYSE"},
+        "CROWDSTRIKE HLD. DL-,0005": {"ticker": "CRWD", "exchange": "NasdaqGS"},
+        "NUTANIX INC. A": {"ticker": "NTNX", "exchange": "NasdaqGS"},
         
         # Direct ticker mappings for all companies
         "RHM": {"ticker": "RHM", "exchange": "XTRA"},
