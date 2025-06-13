@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+Archive/
+combined_portfolio_*.csv
+*_detailed.csv
+Source/
+
+# Temporary files
+*.tmp
+*.bak
+*.log

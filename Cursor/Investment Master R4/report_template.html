@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ ticker }} - Value Investing Analysis Report</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f8f9fa;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 20px;
+    }
+    
+    .header h1 {
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+    
+    .header p {
+      color: #7f8c8d;
+      font-size: 1.1em;
+    }
+    
+    .recommendation {
+      text-align: center;
+      padding: 15px;
+      margin: 20px 0;
+      font-size: 1.2em;
+      border-radius: 5px;
+    }
+    
+    .recommendation.buy {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .recommendation.hold {
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+    }
+    
+    .recommendation.avoid {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .recommendation.insufficient {
+      background-color: #e2e3e5;
+      color: #383d41;
+      border: 1px solid #d6d8db;
+    }
+    
+    .summary-card {
+      background-color: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .metric-box {
+      background-color: white;
+      border-radius: 5px;
+      padding: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    
+    .metric-box h3 {
+      margin-top: 0;
+      color: #2c3e50;
+      font-size: 1em;
+      text-transform: uppercase;
+    }
+    
+    .metric-box .value {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #3498db;
+      margin: 10px 0;
+    }
+    
+    .valuation-methods {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .valuation-card {
+      background-color: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    
+    .valuation-card h3 {
+      color: #2c3e50;
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    .valuation-detail {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    
+    .valuation-detail .label {
+      color: #7f8c8d;
+    }
+    
+    .valuation-detail .value {
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    
+    .upside {
+      text-align: center;
+      font-size: 1.2em;
+      padding: 10px;
+      margin-top: 15px;
+      border-radius: 5px;
+    }
+    
+    .upside.positive {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .upside.negative {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .strength-concern-list {
+      background-color: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .strength-concern-list h3 {
+      color: #2c3e50;
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    .strength-concern-list ul {
+      padding-left: 20px;
+    }
+    
+    .strength-concern-list li {
+      margin-bottom: 10px;
+    }
+    
+    .strengths li::marker {
+      color: #27ae60;
+      content: "✓ ";
+    }
+    
+    .concerns li::marker {
+      color: #e74c3c;
+      content: "✗ ";
+    }
+    
+    .chart-container {
+      background-color: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .chart-container h3 {
+      color: #2c3e50;
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    .chart-container img {
+      max-width: 100%;
+      height: auto;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ company_name }} ({{ ticker }})</h1>
+    <p>Value Investing Analysis Report | {{ analysis_date }}</p>
+  </div>
+  
+  <div class="recommendation {{ recommendation_class }}">
+    <strong>Recommendation:</strong> {{ recommendation }}
+  </div>
+  
+  <div class="summary-card">
+    <h2>Current Valuation</h2>
+    <div class="metrics-grid">
+      <div class="metric-box">
+        <h3>Current Price</h3>
+        <div class="value">${{ current_price }}</div>
+      </div>
+      <div class="metric-box">
+        <h3>P/E Ratio</h3>
+        <div class="value">{{ pe_ratio }}</div>
+      </div>
+      <div class="metric-box">
+        <h3>P/B Ratio</h3>
+        <div class="value">{{ pb_ratio }}</div>
+      </div>
+      <div class="metric-box">
+        <h3>Dividend Yield</h3>
+        <div class="value">{{ dividend_yield }}%</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="summary-card">
+    <h2>Financial Health</h2>
+    <div class="metrics-grid">
+      <div class="metric-box">
+        <h3>Debt-to-Equity</h3>
+        <div class="value">{{ debt_to_equity }}</div>
+      </div>
+      <div class="metric-box">
+        <h3>Current Ratio</h3>
+        <div class="value">{{ current_ratio }}</div>
+      </div>
+      <div class="metric-box">
+        <h3>Return on Equity</h3>
+        <div class="value">{{ roe }}%</div>
+      </div>
+      <div class="metric-box">
+        <h3>Profit Margin</h3>
+        <div class="value">{{ profit_margin }}%</div>
+      </div>
+    </div>
+  </div>
+  
+  <h2>Valuation Methods</h2>
+  
+  <div class="valuation-methods">
+    <div class="valuation-card">
+      <h3>Discounted Cash Flow (DCF)</h3>
+      <div class="valuation-detail">
+        <span class="label">Intrinsic Value:</span>
+        <span class="value">${{ dcf_intrinsic_value }}</span>
+      </div>
+      <div class="valuation-detail">
+        <span class="label">Current Price:</span>
+        <span class="value">${{ current_price }}</span>
+      </div>
+      <div class="upside {{ dcf_upside_class }}">
+        {{ dcf_upside_direction }} {{ dcf_upside_value }}%
+      </div>
+    </div>
+    
+    <div class="valuation-card">
+      <h3>Benjamin Graham Number</h3>
+      <div class="valuation-detail">
+        <span class="label">Graham Number:</span>
+        <span class="value">${{ graham_number }}</span>
+      </div>
+      <div class="valuation-detail">
+        <span class="label">Current Price:</span>
+        <span class="value">${{ current_price }}</span>
+      </div>
+      <div class="upside {{ graham_upside_class }}">
+        {{ graham_upside_direction }} {{ graham_upside_value }}%
+      </div>
+    </div>
+    
+    <div class="valuation-card">
+      <h3>Warren Buffett Approach</h3>
+      <div class="valuation-detail">
+        <span class="label">Intrinsic Value:</span>
+        <span class="value">${{ buffett_intrinsic_value }}</span>
+      </div>
+      <div class="valuation-detail">
+        <span class="label">Current Price:</span>
+        <span class="value">${{ current_price }}</span>
+      </div>
+      <div class="upside {{ buffett_upside_class }}">
+        {{ buffett_upside_direction }} {{ buffett_upside_value }}%
+      </div>
+    </div>
+  </div>
+  
+  <div class="strength-concern-list">
+    <h3>Strengths</h3>
+    <ul class="strengths">
+      {% for strength in strengths %}
+      <li>{{ strength }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  
+  <div class="strength-concern-list">
+    <h3>Concerns</h3>
+    <ul class="concerns">
+      {% for concern in concerns %}
+      <li>{{ concern }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  
+  <div class="chart-container">
+    <h3>Historical P/E Ratio</h3>
+    <img src="{{ pe_chart_path }}" alt="Historical P/E Ratio">
+  </div>
+  
+  <div class="footer">
+    <p>This analysis is based on value investing principles from "Build Wealth with Common Stocks" and other methodologies.</p>
+    <p>Data provided for educational purposes only. Not financial advice.</p>
+    <p>Generated on {{ analysis_date }}</p>
+  </div>
+</body>
+</html> 
